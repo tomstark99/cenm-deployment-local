@@ -1,2 +1,5 @@
-#CENM folders
+# CENM folders
 cenm-*/
+
+# args
+.env
