@@ -85,9 +85,9 @@ class Service:
     # make a copy of gateway for both public and private
     def _handle_gateway(self, zip_name):
         if 'cenm-tool' in zip_name:
-            os.system(f'mv {zip_name} cenm-gateway')
+            os.system(f'mv {zip_name} cenm-gateway/cenm-tool')
             if self.ext == 'zip':
-                os.system(f'(cd cenm-gateway && unzip {zip_name} && rm {zip_name})')
+                os.system(f'(cd cenm-gateway/cenm-tool && unzip {zip_name} && rm {zip_name})')
         else:
             os.system(f'cp {zip_name} cenm-gateway/public')
             os.system(f'mv {zip_name} cenm-gateway/private')
