@@ -1,4 +1,5 @@
 #!/bin/bash -e
+printf "Cloning deployment repo...\n"
 git clone git@github.com:tomstark99/cenm-deployment-local.git --quiet
 cat << EOL
 To continue with the setup, edit your env file in cenm-deployment-local/.env
