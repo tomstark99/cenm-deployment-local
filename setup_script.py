@@ -189,7 +189,7 @@ class CertificateGenerator:
 
     def _signer(self):
         # trust stores
-        self._copy('trust-stores/corda-ssl-trust-store.jks', 'cenm-nmap/certificates')
+        self._copy('trust-stores/corda-ssl-trust-store.jks', 'cenm-signer/certificates')
         # key stores
         self._copy('key-stores/corda-network-map-keys.jks', 'cenm-signer/certificates')
         self._copy('key-stores/corda-identity-manager-keys.jks', 'cenm-signer/certificates')
@@ -246,7 +246,7 @@ global_services = [
 ]
 
 def main(args: argparse.Namespace):
-    
+
     if args.setup_dir_structure:
         for service in global_services:
             service.download()
