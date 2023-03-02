@@ -84,8 +84,13 @@ class Service:
 
     # make a copy of gateway for both public and private
     def _handle_gateway(self, zip_name):
-        os.system(f'cp {zip_name} cenm-gateway/public')
-        os.system(f'mv {zip_name} cenm-gateway/private')
+        if 'cenm-tool' in zip_name:
+            os.system(f'mv {zip_name} cenm-gateway')
+            if self.ext == 'zip':
+                os.system(f'(cd cenm-gateway && unzip {zip_name} && rm {zip_name})')
+        else:
+            os.system(f'cp {zip_name} cenm-gateway/public')
+            os.system(f'mv {zip_name} cenm-gateway/private')
 
     # download command that fetches the artifact from artifactory
     def download(self):
