@@ -60,6 +60,8 @@ class Service:
             return 'auth'
         elif abb == 'cli':
             return 'gateway'
+        elif abb == 'crr-tool':
+            return 'idman'
         else:
             return abb
 
@@ -93,6 +95,12 @@ class Service:
             os.system(f'cp {zip_name} cenm-gateway/public')
             os.system(f'mv {zip_name} cenm-gateway/private')
 
+    def _install_idman_tool(self, zip_name):
+        os.system(f'mkdir -p cenm-idman/tools/{self.artifact_name}')
+        os.system(f'mv {zip_name} cenm-idman/tools/{self.artifact_name}')
+        if self.ext == 'zip':
+            os.system(f'(cd cenm-idman/tools/{self.artifact_name} && unzip {zip_name} && rm {zip_name})')
+
     # download command that fetches the artifact from artifactory
     def download(self):
         zip_name = f'{self.artifact_name}-{self.version}.{self.ext}'
@@ -104,6 +112,10 @@ class Service:
             if self.artifact_name == "pki-tool":
                 if "pkitool.jar" in files:
                     print(f'pkitool.jar already exists. Skipping download.')
+                    return
+            elif self.artifact_name == "crr-submission-tool":
+                if "crrsubmissiontool.jar" in files:
+                    print(f'crrsubmissiontool.jar already exists. Skipping download.')
                     return
             else:
                 if f'{self.artifact_name}.jar' in files or f'{self.artifact_name}-{self.version}.jar' in files:
@@ -117,6 +129,9 @@ class Service:
             self._handle_plugin(zip_name)
         elif self.dir == 'gateway':
             self._handle_gateway(zip_name)
+        elif self.artifact_name in ['crr-submission-tool']:
+            print("hslsldflslfdslfsdfsdfdslsfd")
+            self._install_idman_tool(zip_name)
         else:
             os.system(f'mv {zip_name} cenm-{self.dir}')
             if self.ext == 'zip':
@@ -249,6 +264,7 @@ global_services = [
     Service('plugin', 'accounts-baseline-cenm', cenm_version, 'jar', f'{base_url}/{enm_package}'),
     Service('cli', 'cenm-tool', nms_visual_version, 'zip', f'{base_url}/{enm_package}'),
     Service('idman', 'identitymanager', cenm_version, 'zip', f'{base_url}/{enm_package}/services'),
+    Service('crr-tool', 'crr-submission-tool', cenm_version, 'zip', f'{base_url}/{enm_package}/tools'),
     Service('nmap', 'networkmap', cenm_version, 'zip', f'{base_url}/{enm_package}/services'),
     # Service('notary', 'notary', corda_version, 'zip', f'{base_url}/{enm_package}/services'),
     Service('pki', 'pki-tool', cenm_version, 'zip', f'{base_url}/{enm_package}/tools'),
