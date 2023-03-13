@@ -31,6 +31,7 @@ try:
     auth_version = args["AUTH_VERSION"]
     gateway_version = args["GATEWAY_VERSION"]
     cenm_version = args["CENM_VERSION"]
+    nms_visual_version = args["NMS_VISUAL_VERSION"]
     corda_version = '4.5.11'
 except KeyError as e:
     raise KeyError(f"Missing variable in .env file: {e}")
@@ -87,7 +88,7 @@ class Service:
         if 'cenm-tool' in zip_name:
             os.system(f'mv {zip_name} cenm-gateway/cenm-tool')
             if self.ext == 'zip':
-                os.system(f'(cd cenm-gateway/cenm-tool && unzip {zip_name} && rm {zip_name})')
+                os.system(f'(cd cenm-gateway/cenm-tool && unzip {zip_name} && rm {zip_name} && chmod +x cenm)')
         else:
             os.system(f'cp {zip_name} cenm-gateway/public')
             os.system(f'mv {zip_name} cenm-gateway/private')
@@ -100,9 +101,14 @@ class Service:
         
         # Check for existing artifact
         for _, _, files in os.walk(f'cenm-{self.dir}'):
-            if f'{self.artifact_name}.jar' in files or f'{self.artifact_name}-{self.version}.jar' in files:
-                print(f'{self.artifact_name}.jar already exists. Skipping download.')
-                return
+            if self.artifact_name == "pki-tool":
+                if "pkitool.jar" in files:
+                    print(f'pkitool.jar already exists. Skipping download.')
+                    return
+            else:
+                if f'{self.artifact_name}.jar' in files or f'{self.artifact_name}-{self.version}.jar' in files:
+                    print(f'{self.artifact_name}.jar already exists. Skipping download.')
+                    return
 
         # If artifact not present then download it
         print(f'Downloading {zip_name}')
@@ -241,7 +247,7 @@ global_services = [
     Service('client', 'accounts-client', auth_version, 'jar', f'{base_url}/{ext_package}/accounts'),
     Service('gateway', 'gateway-service', gateway_version, 'jar', f'{base_url}/{ext_package}/gateway'),
     Service('plugin', 'accounts-baseline-cenm', cenm_version, 'jar', f'{base_url}/{enm_package}'),
-    Service('cli', 'cenm-tool', cenm_version, 'zip', f'{base_url}/{enm_package}'),
+    Service('cli', 'cenm-tool', nms_visual_version, 'zip', f'{base_url}/{enm_package}'),
     Service('idman', 'identitymanager', cenm_version, 'zip', f'{base_url}/{enm_package}/services'),
     Service('nmap', 'networkmap', cenm_version, 'zip', f'{base_url}/{enm_package}/services'),
     # Service('notary', 'notary', corda_version, 'zip', f'{base_url}/{enm_package}/services'),
