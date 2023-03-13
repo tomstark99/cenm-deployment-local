@@ -12,6 +12,7 @@ To continue with the setup, edit your env file in cenm-deployment-local/.env
     3. AUTH_VERSION=<auth_version>
     4. GATEWAY_VERSION=<gateway_version>
     5. CENM_VERSION=<cenm_version>
+    6. NMS_VISUAL_VERSION=<nms_visual_version>
 
 Once you are done with this, come back to this script and
 EOL
