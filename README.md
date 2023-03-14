@@ -61,7 +61,7 @@ python3 setup_script.py --setup-dir-structure --generate-certs
 
 CENM services should be deployed in a particular order, this being:
 
-1. Run the pki-tool (this can be run with the python scripts by specifying `--generate-certs`
+1. Run the pki-tool (this can be run with the python scripts by specifying `--generate-certs`)
     
     ```shell
     java -jar pkitool.jar -f pki.conf
@@ -71,13 +71,13 @@ CENM services should be deployed in a particular order, this being:
 
     ```shell
     java -jar identitymanager.jar -f identitymanager.conf
-    ````
+    ```
     
 3. Start the signer service
 
     ```shell
     java -jar signer.jar -f signer.conf
-    ````
+    ```
     
 4. Register the notary
 
@@ -86,7 +86,7 @@ CENM services should be deployed in a particular order, this being:
         --initial-registration \
         --network-root-truststore ./certificates/network-root-truststore.jks \
         --network-root-truststore-password trustpass
-    ````
+    ```
     
 5. Set network parameters
 
@@ -97,19 +97,19 @@ CENM services should be deployed in a particular order, this being:
         --network-truststore ./certificates/network-root-truststore.jks \
         --truststore-password trustpass \
         --root-alias cordarootca
-    ````
+    ```
     
 6. Start the network map
 
     ```shell
     java -jar networkmap.jar -f networkmap.conf
-    ````
+    ```
     
 7. Start the notary
 
     ```shell
     java -jar corda.jar -f notary.conf
-    ````
+    ```
 
 8. Start the auth service
 
@@ -120,20 +120,20 @@ CENM services should be deployed in a particular order, this being:
         --initial-user-password p4ssWord \
         --keep-running \
         --verbose
-    ````
+    ```
     
 9. Start the private and public gateway services
 
     ```shell
     java -jar gateway-service.jar -f private.conf
     java -jar gateway-service.jar -f public.conf
-    ````
+    ```
     
 10. Start the zone service
 
     ```shell
     java -jar zone.jar \
-        --driver-class-name=org.h2.Driver\
+        --driver-class-name=org.h2.Driver \
         --jdbc-driver= \
         --user=zoneuser \
         --password=password \
@@ -152,7 +152,7 @@ CENM services should be deployed in a particular order, this being:
         --tls-keystore-password=password \
         --tls-truststore=certificates/corda-ssl-trust-store.jks \
         --tls-truststore-password=trustpass
-    ````
+    ```
     
 11. Run the `setupAuth.sh` script to add users to the auth service
     
