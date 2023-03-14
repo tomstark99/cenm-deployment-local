@@ -33,7 +33,7 @@ AUTH_VERSION=<auth_version>
 GATEWAY_VERSION=<gateway_version>
 CENM_VERSION=<cenm_version>
 NMS_VISUAL_VERSION=<nms_visual_version>
-CORDA_VERSION=<corda_version>
+NOTARY_VERSION=<corda_version>
 ```
 
 Once you have saved this file, you can run the python script with the following options
@@ -56,3 +56,108 @@ This command will download all the config files in the correct directories as we
 ```shell
 python3 setup_script.py --setup-dir-structure --generate-certs
 ```
+
+## Deployment Order
+
+CENM services should be deployed in a particular order, this being:
+
+1. Run the pki-tool (this can be run with the python scripts by specifying `--generate-certs`
+    
+    ```shell
+    java -jar pkitool.jar -f pki.conf
+    ```
+    
+2. Start the identity manager
+
+    ```shell
+    java -jar identitymanager.jar -f identitymanager.conf
+    ````
+    
+3. Start the signer service
+
+    ```shell
+    java -jar signer.jar -f signer.conf
+    ````
+    
+4. Register the notary
+
+    ```shell
+    java -jar corda.jar \
+        --initial-registration \
+        --network-root-truststore ./certificates/network-root-truststore.jks \
+        --network-root-truststore-password trustpass
+    ````
+    
+5. Set network parameters
+
+    ```shell
+    java -jar networkmap.jar \
+        -f networkmap.conf \
+        --set-network-parameters networkparameters.conf \
+        --network-truststore ./certificates/network-root-truststore.jks \
+        --truststore-password trustpass \
+        --root-alias cordarootca
+    ````
+    
+6. Start the network map
+
+    ```shell
+    java -jar networkmap.jar -f networkmap.conf
+    ````
+    
+7. Start the notary
+
+    ```shell
+    java -jar corda.jar -f notary.conf
+    ````
+
+8. Start the auth service
+
+    ```shell
+    java -jar accounts-application.jar \
+        -f ./auth.conf \
+        --initial-user-name admin \
+        --initial-user-password p4ssWord \
+        --keep-running \
+        --verbose
+    ````
+    
+9. Start the private and public gateway services
+
+    ```shell
+    java -jar gateway-service.jar -f private.conf
+    java -jar gateway-service.jar -f public.conf
+    ````
+    
+10. Start the zone service
+
+    ```shell
+    java -jar zone.jar \
+        --driver-class-name=org.h2.Driver\
+        --jdbc-driver= \
+        --user=zoneuser \
+        --password=password \
+        --url='jdbc:h2:file:./h2/zone-persistence;DB_CLOSE_ON_EXIT=FALSE;LOCK_TIMEOUT=10000;WRITE_DELAY=0;AUTO_SERVER_PORT=0' \
+        --run-migration=true \
+        --enm-listener-port=5061 \
+        --admin-listener-port=5063 \
+        --auth-host=127.0.0.1 \
+        --auth-port=8081 \
+        --auth-trust-store-location certificates/corda-ssl-trust-store.jks \
+        --auth-trust-store-password trustpass \
+        --auth-issuer test \
+        --auth-leeway 5 \
+        --tls=true \
+        --tls-keystore=certificates/corda-ssl-identity-manager-keys.jks \
+        --tls-keystore-password=password \
+        --tls-truststore=certificates/corda-ssl-trust-store.jks \
+        --tls-truststore-password=trustpass
+    ````
+    
+11. Run the `setupAuth.sh` script to add users to the auth service
+    
+    ```shell
+    setupAuth.sh
+    ```
+    
+12. Verify your gateway is up by navigating to http://localhost:8089
