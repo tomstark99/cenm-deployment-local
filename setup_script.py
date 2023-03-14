@@ -32,7 +32,7 @@ try:
     gateway_version = args["GATEWAY_VERSION"]
     cenm_version = args["CENM_VERSION"]
     nms_visual_version = args["NMS_VISUAL_VERSION"]
-    corda_version = '4.5.11'
+    corda_version = args["CORDA_VERSION"]
 except KeyError as e:
     raise KeyError(f"Missing variable in .env file: {e}")
 
@@ -40,7 +40,8 @@ except KeyError as e:
 base_url = 'https://software.r3.com/artifactory'
 ext_package = 'extensions-lib-release-local/com/r3/appeng'
 enm_package = 'r3-enterprise-network-manager/com/r3/enm'
-repos = ['auth', 'gateway', 'idman', 'nmap', 'pki', 'signer', 'zone']
+corda_package = 'corda-releases/net/corda'
+repos = ['auth', 'gateway', 'idman', 'nmap', 'notary', 'pki', 'signer', 'zone']
 
 # Define service class to handle downloading and unzipping
 class Service:
@@ -209,9 +210,9 @@ class CertificateGenerator:
         self._copy('key-stores/corda-network-map-keys.jks', 'cenm-nmap/certificates')
         self._copy('key-stores/corda-ssl-network-map-keys.jks', 'cenm-nmap/certificates')
 
-    # def _notary(self):
-    #     # trust stores
-    #     self._copy('trust-stores/network-root-truststore.jks' 'cenm-notary/certificates')
+    def _notary(self):
+        # trust stores
+        self._copy('trust-stores/network-root-truststore.jks', 'cenm-notary/certificates')
 
     def _signer(self):
         # trust stores
@@ -235,7 +236,7 @@ class CertificateGenerator:
         self._gateway()
         self._idman()
         self._nmap()
-        # self._notary()
+        self._notary()
         self._signer()
         self._zone()
 
@@ -266,7 +267,7 @@ global_services = [
     Service('idman', 'identitymanager', cenm_version, 'zip', f'{base_url}/{enm_package}/services'),
     Service('crr-tool', 'crr-submission-tool', cenm_version, 'zip', f'{base_url}/{enm_package}/tools'),
     Service('nmap', 'networkmap', cenm_version, 'zip', f'{base_url}/{enm_package}/services'),
-    # Service('notary', 'notary', corda_version, 'zip', f'{base_url}/{enm_package}/services'),
+    Service('notary', 'corda', corda_version, 'jar', f'{base_url}/{corda_package}'),
     Service('pki', 'pki-tool', cenm_version, 'zip', f'{base_url}/{enm_package}/tools'),
     Service('signer', 'signer', cenm_version, 'zip', f'{base_url}/{enm_package}/services'),
     Service('zone', 'zone', cenm_version, 'zip', f'{base_url}/{enm_package}/services')
