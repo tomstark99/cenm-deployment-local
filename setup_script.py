@@ -15,6 +15,19 @@ parser.add_argument(
     action='store_true', 
     help='Generate certificates and distribute them to services'
 )
+parser.add_argument(
+    '--clean', 
+    default=False, 
+    action='store_true', 
+    help='Remove all downloaded artifacts and generated certificates'
+)
+parser.add_argument(
+    '--deep-clean', 
+    default=False, 
+    action='store_true', 
+    help='Remove all generated service folders'
+)
+
 
 # Check if .env file exists
 if not os.path.exists(".env"):
@@ -148,6 +161,30 @@ class Service:
             os.system(f'mkdir cenm-{self.dir}/drivers')
         for driver in self.drivers:
             os.system(f'wget {driver} -P cenm-{self.dir}/drivers')
+
+    def clean(self, deep):
+        if deep:
+            os.system(f'rm -rf cenm-{self.dir}')
+            return
+        for root, dirs, files in os.walk(f'cenm-{self.dir}'):
+            for file in files:
+                if file.endswith('.jar'):
+                    os.system(f'rm {os.path.join(root, file)}')
+                elif file.endswith('.jks'):
+                    os.system(f'rm {os.path.join(root, file)}')
+                elif file.endswith('.crl'):
+                    os.system(f'rm {os.path.join(root, file)}')
+                elif file in ["cenm", "cenm.cmd"]:
+                    os.system(f'rm {os.path.join(root, file)}')
+            for dir in dirs:
+                if dir in ["logs", "h2", "ssh", "shell-commands"]:
+                    os.system(f'rm -rf {os.path.join(root, dir)}')
+                if self.dir == "idman":
+                    if os.path.join(root, dir).split("/")[-2] == "tools":
+                        os.system(f'rm -rf {os.path.join(root, dir)}')
+                if self.dir == "pki":
+                    if dir in ["crl-files", "trust-stores", "key-stores"]:
+                        os.system(f'rm -rf {os.path.join(root, dir)}')
 
 class CertificateGenerator:
     def __init__(self, services: List[Service]):
@@ -284,16 +321,28 @@ def main(args: argparse.Namespace):
         cert_generator = CertificateGenerator(global_services)
         cert_generator.generate()
 
+    if args.clean and args.deep_clean:
+        raise ValueError("Cannot use both --clean and --deep-clean flags.")
+
+    if args.clean:
+        for service in global_services:
+            service.clean(deep=False)
+    
+    if args.deep_clean:
+        for service in global_services:
+            service.clean(deep=True)
+
     # end of script report
-    print("")
-    print("=== End of script report ===")
-    if any(download_errors.values()):
-        print("The following errors were encountered when downloading artifacts:")
-        for artifact_name, error in download_errors.items():
-            if error:
-                print(f'Error encountered when downloading {artifact_name}, please check version and try again.')
-    else:
-        print("All artifacts downloaded successfully.")
+    if args.setup_dir_structure:
+        print("")
+        print("=== End of script report ===")
+        if any(download_errors.values()):
+            print("The following errors were encountered when downloading artifacts:")
+            for artifact_name, error in download_errors.items():
+                if error:
+                    print(f'Error encountered when downloading {artifact_name}, please check version and try again.')
+        else:
+            print("All artifacts downloaded successfully.")
 
 if __name__ == '__main__':
     main(parser.parse_args())
