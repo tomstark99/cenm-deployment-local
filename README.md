@@ -33,6 +33,7 @@ AUTH_VERSION=<auth_version>
 GATEWAY_VERSION=<gateway_version>
 CENM_VERSION=<cenm_version>
 NMS_VISUAL_VERSION=<nms_visual_version>
+CORDA_VERSION=<corda_version>
 ```
 
 Once you have saved this file, you can run the python script with the following options
