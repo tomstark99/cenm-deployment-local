@@ -32,7 +32,7 @@ try:
     gateway_version = args["GATEWAY_VERSION"]
     cenm_version = args["CENM_VERSION"]
     nms_visual_version = args["NMS_VISUAL_VERSION"]
-    corda_version = args["CORDA_VERSION"]
+    corda_version = args["NOTARY_VERSION"]
 except KeyError as e:
     raise KeyError(f"Missing variable in .env file: {e}")
 
@@ -53,7 +53,8 @@ class Service:
         self.ext = ext
         self.version = version
         self.url = self._build_url(url)
-        self.drivers = ['https://jdbc.postgresql.org/download/postgresql-42.2.9.jar']
+        # self.drivers = ['https://jdbc.postgresql.org/download/postgresql-42.2.9.jar']
+        self.error = False
 
     # dir builder
     def _build_dir(self, abb):
@@ -125,18 +126,20 @@ class Service:
 
         # If artifact not present then download it
         print(f'Downloading {zip_name}')
-        os.system(f'wget --user {username} --password {password} {self.url}')
+        cmd = os.system(f'wget --user {username} --password {password} {self.url}')
+        if os.WEXITSTATUS(cmd) != 0:
+            self.error = True
         if self.plugin:
             self._handle_plugin(zip_name)
         elif self.dir == 'gateway':
             self._handle_gateway(zip_name)
         elif self.artifact_name in ['crr-submission-tool']:
-            print("hslsldflslfdslfsdfsdfdslsfd")
             self._install_idman_tool(zip_name)
         else:
             os.system(f'mv {zip_name} cenm-{self.dir}')
             if self.ext == 'zip':
                 os.system(f'(cd cenm-{self.dir} && unzip {zip_name} && rm {zip_name})')
+        return self.error
 
     # WIP download jdbc drivers
     def download_drivers(self):
@@ -253,9 +256,6 @@ class CertificateGenerator:
             print('Generating certificates')
             os.system(f'(cd cenm-{self.pki_service.dir} && java -jar pkitool.jar -f pki.conf)')
         self._distribute_certs()
-                
-
-
 
 # Define list of services to download
 global_services = [
@@ -275,12 +275,25 @@ global_services = [
 
 def main(args: argparse.Namespace):
 
+    download_errors = {}
     if args.setup_dir_structure:
         for service in global_services:
-            service.download()
+            download_errors[service.artifact_name] = service.download()
+        
     if args.generate_certs:
         cert_generator = CertificateGenerator(global_services)
         cert_generator.generate()
+
+    # end of script report
+    print("")
+    print("=== End of script report ===")
+    if any(download_errors.values()):
+        print("The following errors were encountered when downloading artifacts:")
+        for artifact_name, error in download_errors.items():
+            if error:
+                print(f'Error encountered when downloading {artifact_name}, please check version and try again.')
+    else:
+        print("All artifacts downloaded successfully.")
 
 if __name__ == '__main__':
     main(parser.parse_args())
