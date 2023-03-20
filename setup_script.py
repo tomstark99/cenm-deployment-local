@@ -19,6 +19,12 @@ parser.add_argument(
     '--clean', 
     default=False, 
     action='store_true', 
+    help='Remove all generated run-time files'
+)
+parser.add_argument(
+    '--clean-artifacts', 
+    default=False, 
+    action='store_true', 
     help='Remove all downloaded artifacts and generated certificates'
 )
 parser.add_argument(
@@ -96,7 +102,7 @@ class Service:
     def _handle_plugin(self, zip_name):
         if not os.path.exists(f'cenm-auth/plugins'):
             os.system(f'mkdir cenm-auth/plugins')
-        os.system(f'mv {zip_name} cenm-auth/plugins')
+        os.system(f'mv {zip_name} cenm-auth/plugins/accounts-baseline-cenm.jar')
         # if self.ext == 'zip':
         #     os.system(f'(cd cenm-{self.abb}/plugins && unzip {zip_name} && rm {zip_name})')
 
@@ -162,29 +168,44 @@ class Service:
         for driver in self.drivers:
             os.system(f'wget {driver} -P cenm-{self.dir}/drivers')
 
-    def clean(self, deep):
+    def clean(self, 
+        deep: bool,
+        artifacts: bool,
+        runtime: bool
+    ):
+        runtime_files = {
+            'dirs': ["logs", "h2", "ssh", "shell-commands", "djvm", "cordapps", "artemis", "brokers", "additional-node-infos"],
+            'notary_files': ["process-id", "network-parameters", "nodekeystore.jks", "truststore.jks", "sslkeystore.jks"]
+        }
         if deep:
             os.system(f'rm -rf cenm-{self.dir}')
             return
         for root, dirs, files in os.walk(f'cenm-{self.dir}'):
-            for file in files:
-                if file.endswith('.jar'):
-                    os.system(f'rm {os.path.join(root, file)}')
-                elif file.endswith('.jks'):
-                    os.system(f'rm {os.path.join(root, file)}')
-                elif file.endswith('.crl'):
-                    os.system(f'rm {os.path.join(root, file)}')
-                elif file in ["cenm", "cenm.cmd"]:
-                    os.system(f'rm {os.path.join(root, file)}')
-            for dir in dirs:
-                if dir in ["logs", "h2", "ssh", "shell-commands"]:
-                    os.system(f'rm -rf {os.path.join(root, dir)}')
-                if self.dir == "idman":
-                    if os.path.join(root, dir).split("/")[-2] == "tools":
+            if artifacts:
+                for file in files:
+                    if file.endswith('.jar'):
+                        os.system(f'rm {os.path.join(root, file)}')
+                    elif file.endswith('.jks'):
+                        os.system(f'rm {os.path.join(root, file)}')
+                    elif file.endswith('.crl'):
+                        os.system(f'rm {os.path.join(root, file)}')
+                    elif file in ["cenm", "cenm.cmd"]:
+                        os.system(f'rm {os.path.join(root, file)}')
+            if runtime:
+                for file in files:
+                    if file.startswith("nodeInfo"):
+                        os.system(f'rm {os.path.join(root, file)}')
+                    if file in runtime_files["notary_files"] and self.dir == "notary":
+                        os.system(f'rm {os.path.join(root, file)}')
+                for dir in dirs:
+                    if dir in runtime_files["dirs"]:
                         os.system(f'rm -rf {os.path.join(root, dir)}')
-                if self.dir == "pki":
-                    if dir in ["crl-files", "trust-stores", "key-stores"]:
-                        os.system(f'rm -rf {os.path.join(root, dir)}')
+                    if self.dir == "idman":
+                        if os.path.join(root, dir).split("/")[-2] == "tools":
+                            os.system(f'rm -rf {os.path.join(root, dir)}')
+                    if self.dir == "pki":
+                        if dir in ["crl-files", "trust-stores", "key-stores"]:
+                            os.system(f'rm -rf {os.path.join(root, dir)}')
 
 class CertificateGenerator:
     def __init__(self, services: List[Service]):
@@ -323,14 +344,21 @@ def main(args: argparse.Namespace):
 
     if args.clean and args.deep_clean:
         raise ValueError("Cannot use both --clean and --deep-clean flags.")
+    if args.clean and args.clean_artifacts:
+        raise ValueError("Cannot use both --clean and --clean-artifacts flags.")
+    if args.deep_clean and args.clean_artifacts:
+        raise ValueError("Cannot use both --deep-clean and --clean-artifacts flags.")
 
-    if args.clean:
-        for service in global_services:
-            service.clean(deep=False)
-    
     if args.deep_clean:
         for service in global_services:
-            service.clean(deep=True)
+            service.clean(deep=True, artifacts=False, runtime=False)
+    elif args.clean_artifacts:
+        for service in global_services:
+            service.clean(deep=False, artifacts=True, runtime=True)
+    elif args.clean:
+        for service in global_services:
+            service.clean(deep=False, artifacts=False, runtime=True)
+
 
     # end of script report
     if args.setup_dir_structure:
