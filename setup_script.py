@@ -145,9 +145,12 @@ class Service:
 
         # If artifact not present then download it
         print(f'Downloading {zip_name}')
-        cmd = os.system(f'wget --user {username} --password {password} {self.url}')
+
+        cmd = os.system(f'wget -q --show-progress --user {username} --password {password} {self.url}')
         if os.WEXITSTATUS(cmd) != 0:
-            self.error = True
+            cmd2 = os.system(f'wget --progress=bar:force:noscroll --user {username} --password {password} {self.url}')
+            if os.WEXITSTATUS(cmd2) != 0:
+                self.error = True
         if self.plugin:
             self._handle_plugin(zip_name)
         elif self.dir == 'gateway':
