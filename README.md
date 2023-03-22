@@ -49,6 +49,9 @@ options:
   --setup-dir-structure
                         Create directory structure for CENM deployment and download all current artifacts
   --generate-certs      Generate certificates and distribute them to services
+  --clean               Remove all generated run-time files
+  --clean-artifacts     Remove all downloaded artifacts and generated certificates
+  --deep-clean          Remove all generated service folders
 ```
 
 This command will download all the config files in the correct directories as well as download all the artifacts with the versions specified in `.env`:
