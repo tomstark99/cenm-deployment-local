@@ -106,11 +106,11 @@ class Service:
             os.system(f'mv {zip_name} cenm-auth/plugins/accounts-baseline-cenm.jar')
         elif self.dir == 'gateway':
             if not os.path.exists(f'cenm-gateway/public/plugins'):
-                os.system(f'mkdir cenm-gateway/public/plugins')
+                os.system(f'mkdir -p cenm-gateway/public/plugins')
             if not os.path.exists(f'cenm-gateway/private/plugins'):
-                os.system(f'mkdir cenm-gateway/private/plugins')
-            os.system(f'mv {zip_name} cenm-gateway/private/plugins/accounts-baseline-cenm.jar')
-            os.system(f'mv {zip_name} cenm-gateway/public/plugins/accounts-baseline-cenm.jar')
+                os.system(f'mkdir -p cenm-gateway/private/plugins')
+            os.system(f'cp {zip_name} cenm-gateway/private/plugins/cenm-gateway-plugin.jar')
+            os.system(f'mv {zip_name} cenm-gateway/public/plugins/cenm-gateway-plugin.jar')
         # if self.ext == 'zip':
         #     os.system(f'(cd cenm-{self.abb}/plugins && unzip {zip_name} && rm {zip_name})')
 
