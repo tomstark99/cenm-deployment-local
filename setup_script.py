@@ -34,6 +34,8 @@ parser.add_argument(
     help='Remove all generated service folders'
 )
 
+def is_wget_installed() -> bool:
+    return os.system('lget --version > /dev/null 2>&1') == 0
 
 # Check if .env file exists
 if not os.path.exists(".env"):
@@ -56,6 +58,7 @@ except KeyError as e:
     raise KeyError(f"Missing variable in .env file: {e}")
 
 # Useful variables
+wget = is_wget_installed()
 base_url = 'https://software.r3.com/artifactory'
 ext_package = 'extensions-lib-release-local/com/r3/appeng'
 enm_package = 'r3-enterprise-network-manager/com/r3/enm'
@@ -119,7 +122,7 @@ class Service:
         if 'cenm-tool' in zip_name:
             os.system(f'mv {zip_name} cenm-gateway/cenm-tool')
             if self.ext == 'zip':
-                os.system(f'(cd cenm-gateway/cenm-tool && unzip {zip_name} && rm {zip_name} && chmod +x cenm)')
+                os.system(f'(cd cenm-gateway/cenm-tool && unzip -q {zip_name} && rm {zip_name} && chmod +x cenm)')
         else:
             os.system(f'cp {zip_name} cenm-gateway/public')
             os.system(f'mv {zip_name} cenm-gateway/private')
@@ -128,7 +131,7 @@ class Service:
         os.system(f'mkdir -p cenm-idman/tools/{self.artifact_name}')
         os.system(f'mv {zip_name} cenm-idman/tools/{self.artifact_name}')
         if self.ext == 'zip':
-            os.system(f'(cd cenm-idman/tools/{self.artifact_name} && unzip {zip_name} && rm {zip_name})')
+            os.system(f'(cd cenm-idman/tools/{self.artifact_name} && unzip -q {zip_name} && rm {zip_name})')
 
     # download command that fetches the artifact from artifactory
     def download(self):
@@ -154,10 +157,15 @@ class Service:
         # If artifact not present then download it
         print(f'Downloading {zip_name}')
 
-        cmd = os.system(f'wget -q --show-progress --user {username} --password {password} {self.url}')
-        if os.WEXITSTATUS(cmd) != 0:
-            cmd2 = os.system(f'wget --progress=bar:force:noscroll --user {username} --password {password} {self.url}')
-            if os.WEXITSTATUS(cmd2) != 0:
+        if wget:
+            cmd = os.system(f'wget -q --show-progress --user {username} --password {password} {self.url}')
+            if cmd != 0:
+                cmd2 = os.system(f'wget --progress=bar:force:noscroll --user {username} --password {password} {self.url}')
+                if cmd2 != 0:
+                    self.error = True
+        else:
+            cmd = os.system(f'curl --progress-bar -u {username}:{password} -O {self.url}')
+            if cmd != 0:
                 self.error = True
         if self.plugin:
             self._handle_plugin(zip_name)
@@ -168,7 +176,7 @@ class Service:
         else:
             os.system(f'mv {zip_name} cenm-{self.dir}')
             if self.ext == 'zip':
-                os.system(f'(cd cenm-{self.dir} && unzip {zip_name} && rm {zip_name})')
+                os.system(f'(cd cenm-{self.dir} && unzip -q {zip_name} && rm {zip_name})')
         return self.error
 
     # WIP download jdbc drivers

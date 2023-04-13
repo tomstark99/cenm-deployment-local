@@ -66,11 +66,13 @@ python3 setup_script.py --setup-dir-structure --generate-certs
 
 CENM services should be deployed in a particular order, this being:
 
-1. Run the pki-tool (this can be run with the python scripts by specifying `--generate-certs`)
+1. If you have not previously run the python scirpt with the `--generate-certs` flag then do this now
     
     ```shell
-    java -jar pkitool.jar -f pki.conf
+    python3 setup_script.py --generate-certs
     ```
+    
+    This will run the pki tool and copy the generated certificates into the correct locations for each service
     
 2. Start the identity manager
 
@@ -88,12 +90,39 @@ CENM services should be deployed in a particular order, this being:
 
     ```shell
     java -jar corda.jar \
+        -f notary.conf
         --initial-registration \
         --network-root-truststore ./certificates/network-root-truststore.jks \
         --network-root-truststore-password trustpass
     ```
     
-5. Set network parameters
+    _Note: There is currently a known issue (https://github.com/tomstark99/cenm-deployment-local/issues/5) where corda versions outside of `4.10` might cause exceptions during registration._
+    
+5. Update the `networkparameters.conf` file with the correct nodeInfo
+
+    When the notary is registered with the network it generates a `nodeInfo-XXXXX...` file. The name of this file needs to replace the `INSERT_NODE_INFO_FILE_NAME_HERE` placeholder in the `cenm-nmap/networkparameters.conf` file e.g.
+    
+    ```properties
+    notaries : [
+        {
+            notaryNodeInfoFile: "nodeInfo-DFD4D403F65EA6C9B33B653A8B855CB3C4F04D599B373E662EBD2146241219F2"
+            validating = false
+        }
+    ]
+
+    minimumPlatformVersion = 4
+    maxMessageSize = 10485760
+    maxTransactionSize = 10485760
+    eventHorizonDays = 10 # Duration in days
+    ```
+    
+    The `nodeInfo-XXXXX...` file should also be copied to the `cenm-nmap/` folder
+    
+    ```shell
+    cp cenm-notary/nodeInfo-* cenm-nmap/
+    ```
+    
+6. Set network parameters
 
     ```shell
     java -jar networkmap.jar \
@@ -104,19 +133,21 @@ CENM services should be deployed in a particular order, this being:
         --root-alias cordarootca
     ```
     
-6. Start the network map
+7. Start the network map
 
     ```shell
     java -jar networkmap.jar -f networkmap.conf
     ```
     
-7. Start the notary
+8. Start the notary
 
     ```shell
     java -jar corda.jar -f notary.conf
     ```
+    
+    _Note: you may have to wait while the network parameters that were set in step 5 are signed, this can take a few minutes._
 
-8. Start the auth service
+9. Start the auth service
 
     ```shell
     java -jar accounts-application.jar \
@@ -127,14 +158,14 @@ CENM services should be deployed in a particular order, this being:
         --verbose
     ```
     
-9. Start the private and public gateway services
+10. Start the private and public gateway services
 
     ```shell
     java -jar gateway-service.jar -f private.conf
     java -jar gateway-service.jar -f public.conf
     ```
     
-10. Start the zone service
+11. Start the zone service
 
     ```shell
     java -jar zone.jar \
@@ -159,10 +190,12 @@ CENM services should be deployed in a particular order, this being:
         --tls-truststore-password=trustpass
     ```
     
-11. Run the `setupAuth.sh` script to add users to the auth service
+12. Run the `setupAuth.sh` script to add users to the auth service
     
     ```shell
     setupAuth.sh
     ```
+
+    _Note: this script requires [jq](https://stedolan.github.io/jq/download/), a command line JSON processor that can be installed easily in various ways._
     
-12. Verify your gateway is up by navigating to http://localhost:8089
+13. Verify your gateway is up by navigating to http://localhost:8089
