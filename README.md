@@ -10,6 +10,8 @@ if you want to skip having to clone the repo manually and running the script you
 /bin/bash -c "$(curl -fsSl https://raw.githubusercontent.com/tomstark99/cenm-deployment-local/HEAD/install.sh)"
 ```
 
+You then skip to the [Deployment Order](#deployment-order) section
+
 ## Getting started
 
 Clone this repo locally:
@@ -40,7 +42,7 @@ Once you have saved this file, you can run the python script with the following 
 
 ```
 $ python3 setup_script.py -h
-usage: setup_script.py [-h] [--setup-dir-structure] [--generate-certs]
+usage: setup_script.py [-h] [--setup-dir-structure] [--generate-certs] [--clean] [--clean-artifacts] [--deep-clean]
 
 Download CENM artifacts from Artifactory
 
@@ -54,7 +56,7 @@ options:
   --deep-clean          Remove all generated service folders
 ```
 
-This command will download all the config files in the correct directories as well as download all the artifacts with the versions specified in `.env`:
+The following command will download all the config files in the correct directories as well as download all the artifacts with the versions specified in `.env`:
 
 ```shell
 python3 setup_script.py --setup-dir-structure --generate-certs
