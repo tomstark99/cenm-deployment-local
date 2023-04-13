@@ -66,7 +66,7 @@ repos = ['auth', 'gateway', 'idman', 'nmap', 'notary', 'pki', 'signer', 'zone']
 class Service:
     def __init__(self, abb, artifact_name, version, ext, url):
         self.dir = self._build_dir(abb)
-        self.plugin = abb == 'plugin'
+        self.plugin = 'plugin' in abb
         self.repo = abb in repos
         self.artifact_name = artifact_name
         self.ext = ext
@@ -77,9 +77,9 @@ class Service:
 
     # dir builder
     def _build_dir(self, abb):
-        if abb in ['auth', 'client', 'plugin']:
+        if abb in ['auth', 'client', 'auth-plugin']:
             return 'auth'
-        elif abb == 'cli':
+        elif abb in ['gateway', 'cli', 'gateway-plugin']:
             return 'gateway'
         elif abb == 'crr-tool':
             return 'idman'
@@ -98,11 +98,19 @@ class Service:
             print(f'Cloning cenm-{self.dir}')
             os.system(f'git clone https://github.com/tomstark99/cenm-{self.dir}.git --quiet')
 
-    # move auth plugin to correct location
+    # move plugins to correct location
     def _handle_plugin(self, zip_name):
-        if not os.path.exists(f'cenm-auth/plugins'):
-            os.system(f'mkdir cenm-auth/plugins')
-        os.system(f'mv {zip_name} cenm-auth/plugins/accounts-baseline-cenm.jar')
+        if self.dir == 'auth':
+            if not os.path.exists(f'cenm-auth/plugins'):
+                os.system(f'mkdir cenm-auth/plugins')
+            os.system(f'mv {zip_name} cenm-auth/plugins/accounts-baseline-cenm.jar')
+        elif self.dir == 'gateway':
+            if not os.path.exists(f'cenm-gateway/public/plugins'):
+                os.system(f'mkdir -p cenm-gateway/public/plugins')
+            if not os.path.exists(f'cenm-gateway/private/plugins'):
+                os.system(f'mkdir -p cenm-gateway/private/plugins')
+            os.system(f'cp {zip_name} cenm-gateway/private/plugins/cenm-gateway-plugin.jar')
+            os.system(f'mv {zip_name} cenm-gateway/public/plugins/cenm-gateway-plugin.jar')
         # if self.ext == 'zip':
         #     os.system(f'(cd cenm-{self.abb}/plugins && unzip {zip_name} && rm {zip_name})')
 
@@ -322,8 +330,9 @@ class CertificateGenerator:
 global_services = [
     Service('auth', 'accounts-application', auth_version, 'jar', f'{base_url}/{ext_package}/accounts'),
     Service('client', 'accounts-client', auth_version, 'jar', f'{base_url}/{ext_package}/accounts'),
+    Service('auth-plugin', 'accounts-baseline-cenm', cenm_version, 'jar', f'{base_url}/{enm_package}'),
     Service('gateway', 'gateway-service', gateway_version, 'jar', f'{base_url}/{ext_package}/gateway'),
-    Service('plugin', 'accounts-baseline-cenm', cenm_version, 'jar', f'{base_url}/{enm_package}'),
+    Service('gateway-plugin', 'cenm-gateway-plugin', nms_visual_version, 'jar', f'{base_url}/{enm_package}'),
     Service('cli', 'cenm-tool', nms_visual_version, 'zip', f'{base_url}/{enm_package}'),
     Service('idman', 'identitymanager', cenm_version, 'zip', f'{base_url}/{enm_package}/services'),
     Service('crr-tool', 'crr-submission-tool', cenm_version, 'zip', f'{base_url}/{enm_package}/tools'),
