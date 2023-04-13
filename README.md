@@ -96,7 +96,7 @@ CENM services should be deployed in a particular order, this being:
         --network-root-truststore-password trustpass
     ```
     
-    _Note: There is currently a known issue (https://github.com/tomstark99/cenm-deployment-local/issues/5) where corda versions outside of `4.10` might cause exceptions during registration_
+    _Note: There is currently a known issue (https://github.com/tomstark99/cenm-deployment-local/issues/5) where corda versions outside of `4.10` might cause exceptions during registration._
     
 5. Update the `networkparameters.conf` file with the correct nodeInfo
 
@@ -195,5 +195,7 @@ CENM services should be deployed in a particular order, this being:
     ```shell
     setupAuth.sh
     ```
+
+    _Note: this script requires [jq](https://stedolan.github.io/jq/download/), a command line JSON processor that can be installed easily in various ways._
     
 13. Verify your gateway is up by navigating to http://localhost:8089
