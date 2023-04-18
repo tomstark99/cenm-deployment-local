@@ -35,7 +35,7 @@ parser.add_argument(
 )
 
 def is_wget_installed() -> bool:
-    return os.system('lget --version > /dev/null 2>&1') == 0
+    return os.system('wget --version > /dev/null 2>&1') == 0
 
 # Check if .env file exists
 if not os.path.exists(".env"):
@@ -63,11 +63,33 @@ base_url = 'https://software.r3.com/artifactory'
 ext_package = 'extensions-lib-release-local/com/r3/appeng'
 enm_package = 'r3-enterprise-network-manager/com/r3/enm'
 corda_package = 'corda-releases/net/corda'
-repos = ['auth', 'gateway', 'idman', 'nmap', 'notary', 'pki', 'signer', 'zone']
+repos = ['auth', 'gateway', 'idman', 'nmap', 'notary', 'node', 'pki', 'signer', 'zone']
+
+class DownloadManager():
+    def __init__(self, username, password, wget):
+        self.username = username
+        self.password = password
+        self.wget = wget
+
+    def download(self, url) -> bool:
+        if self.wget:
+            cmd = os.system(f'wget -q --show-progress --user {self.username} --password {self.password} {url}')
+            if cmd != 0:
+                cmd2 = os.system(f'wget --progress=bar:force:noscroll --user {self.username} --password {self.password} {url}')
+                if cmd2 != 0:
+                    return True
+        else:
+            cmd = os.system(f'curl --progress-bar -u {self.username}:{self.password} -O {url}')
+            if cmd != 0:
+                return True
+        return False
+
+dlm = DownloadManager(username, password, wget)
 
 # Define service class to handle downloading and unzipping
 class Service:
-    def __init__(self, abb, artifact_name, version, ext, url):
+    def __init__(self, abb, artifact_name, version, ext, url, dlm):
+        self.abb = abb
         self.dir = self._build_dir(abb)
         self.plugin = 'plugin' in abb
         self.repo = abb in repos
@@ -75,8 +97,8 @@ class Service:
         self.ext = ext
         self.version = version
         self.url = self._build_url(url)
-        # self.drivers = ['https://jdbc.postgresql.org/download/postgresql-42.2.9.jar']
         self.error = False
+        self.dlm = dlm
 
     # dir builder
     def _build_dir(self, abb):
@@ -156,17 +178,8 @@ class Service:
 
         # If artifact not present then download it
         print(f'Downloading {zip_name}')
+        self.error = self.dlm.download(self.url)
 
-        if wget:
-            cmd = os.system(f'wget -q --show-progress --user {username} --password {password} {self.url}')
-            if cmd != 0:
-                cmd2 = os.system(f'wget --progress=bar:force:noscroll --user {username} --password {password} {self.url}')
-                if cmd2 != 0:
-                    self.error = True
-        else:
-            cmd = os.system(f'curl --progress-bar -u {username}:{password} -O {self.url}')
-            if cmd != 0:
-                self.error = True
         if self.plugin:
             self._handle_plugin(zip_name)
         elif self.dir == 'gateway':
@@ -179,21 +192,13 @@ class Service:
                 os.system(f'(cd cenm-{self.dir} && unzip -q {zip_name} && rm {zip_name})')
         return self.error
 
-    # WIP download jdbc drivers
-    def download_drivers(self):
-        # TODO: find a way to check if driver is already downloaded
-        if not os.path.exists(f'cenm-{self.dir}/drivers'):
-            os.system(f'mkdir cenm-{self.dir}/drivers')
-        for driver in self.drivers:
-            os.system(f'wget {driver} -P cenm-{self.dir}/drivers')
-
     def clean(self, 
         deep: bool,
         artifacts: bool,
         runtime: bool
     ):
         runtime_files = {
-            'dirs': ["logs", "h2", "ssh", "shell-commands", "djvm", "cordapps", "artemis", "brokers", "additional-node-infos"],
+            'dirs': ["logs", "h2", "ssh", "shell-commands", "djvm", "artemis", "brokers", "additional-node-infos"],
             'notary_files': ["process-id", "network-parameters", "nodekeystore.jks", "truststore.jks", "sslkeystore.jks"]
         }
         if deep:
@@ -214,7 +219,7 @@ class Service:
                 for file in files:
                     if file.startswith("nodeInfo"):
                         os.system(f'rm {os.path.join(root, file)}')
-                    if file in runtime_files["notary_files"] and self.dir == "notary":
+                    if file in runtime_files["notary_files"] and self.dir in ['notary', 'node']:
                         os.system(f'rm {os.path.join(root, file)}')
                 for dir in dirs:
                     if dir in runtime_files["dirs"]:
@@ -294,6 +299,10 @@ class CertificateGenerator:
         # trust stores
         self._copy('trust-stores/network-root-truststore.jks', 'cenm-notary/certificates')
 
+    def _node(self):
+        # trust stores
+        self._copy('trust-stores/network-root-truststore.jks', 'cenm-node/certificates')
+
     def _signer(self):
         # trust stores
         self._copy('trust-stores/corda-ssl-trust-store.jks', 'cenm-signer/certificates')
@@ -317,6 +326,7 @@ class CertificateGenerator:
         self._idman()
         self._nmap()
         self._notary()
+        self._node()
         self._signer()
         self._zone()
 
@@ -334,21 +344,83 @@ class CertificateGenerator:
             os.system(f'(cd cenm-{self.pki_service.dir} && java -jar pkitool.jar -f pki.conf)')
         self._distribute_certs()
 
+class DatabaseManager:
+    def __init__(self, services: List[Service], dlm: DownloadManager):
+        self.db_services = ['auth', 'idman', 'nmap', 'notary', 'node', 'zone']
+        self.db_drivers = [
+            "https://repo1.maven.org/maven2/com/microsoft/sqlserver/mssql-jdbc/8.2.2.jre8/mssql-jdbc-8.2.2.jre8.jar", 
+            "https://repo1.maven.org/maven2/org/postgresql/postgresql/42.5.2/postgresql-42.5.2.jar",
+            "https://repo1.maven.org/maven2/com/oracle/ojdbc/ojdbc8/19.3.0.0/ojdbc8-19.3.0.0.jar"
+        ]
+        self.services_with_db = self._get_services_with_db(services)
+        self.dlm = dlm
+        
+    def _get_services_with_db(self, services: List[Service]):
+        return [service for service in services if service.abb in self.db_services]
+
+    def _get_jar_name(self, url):
+        return url.split('/')[-1]
+
+    def _copy(self, source, destination):
+        os.system(f'cp {source} {destination}')
+
+    def _exists(self, driver):
+        jar_file = self._get_jar_name(driver)
+        exists_in_service = {}
+        for service in self.db_services:
+            for _, _, files in os.walk(f'cenm-{service}'):
+                if jar_file in files:
+                    exists_in_service[service] = True
+            if service not in exists_in_service:
+                exists_in_service[service] = False
+        return exists_in_service
+
+    def _cleanup(self, driver):
+        os.system(f'rm {self._get_jar_name(driver)}')
+
+    def _distribute_drivers(self, exists_dict):
+        for service in self.db_services:
+            if not os.path.exists(f'cenm-{service}/drivers'):
+                os.mkdir(f'cenm-{service}/drivers')
+        for driver, exists in exists_dict.items():
+            if not all(exists.values()):
+                for service in self.db_services:
+                    if not exists[service]:
+                        self._copy(self._get_jar_name(driver), f'cenm-{service}/drivers')
+            self._cleanup(driver)
+
+    def download(self):
+        download_errors = {}
+        exists_dict = {}
+
+        for driver in self.db_drivers:
+            exists_dict[driver] = self._exists(driver)
+
+        for driver, exists in exists_dict.items():
+            if not all(exists.values()):
+                download_errors[self._get_jar_name(driver)] = self.dlm.download(driver)
+            else:
+                print(f'{self._get_jar_name(driver)} already exists. Skipping download.')
+
+        self._distribute_drivers(exists_dict)
+        return download_errors
+
 # Define list of services to download
 global_services = [
-    Service('auth', 'accounts-application', auth_version, 'jar', f'{base_url}/{ext_package}/accounts'),
-    Service('client', 'accounts-client', auth_version, 'jar', f'{base_url}/{ext_package}/accounts'),
-    Service('auth-plugin', 'accounts-baseline-cenm', cenm_version, 'jar', f'{base_url}/{enm_package}'),
-    Service('gateway', 'gateway-service', gateway_version, 'jar', f'{base_url}/{ext_package}/gateway'),
-    Service('gateway-plugin', 'cenm-gateway-plugin', nms_visual_version, 'jar', f'{base_url}/{enm_package}'),
-    Service('cli', 'cenm-tool', nms_visual_version, 'zip', f'{base_url}/{enm_package}'),
-    Service('idman', 'identitymanager', cenm_version, 'zip', f'{base_url}/{enm_package}/services'),
-    Service('crr-tool', 'crr-submission-tool', cenm_version, 'zip', f'{base_url}/{enm_package}/tools'),
-    Service('nmap', 'networkmap', cenm_version, 'zip', f'{base_url}/{enm_package}/services'),
-    Service('notary', 'corda', corda_version, 'jar', f'{base_url}/{corda_package}'),
-    Service('pki', 'pki-tool', cenm_version, 'zip', f'{base_url}/{enm_package}/tools'),
-    Service('signer', 'signer', cenm_version, 'zip', f'{base_url}/{enm_package}/services'),
-    Service('zone', 'zone', cenm_version, 'zip', f'{base_url}/{enm_package}/services')
+    Service('auth', 'accounts-application', auth_version, 'jar', f'{base_url}/{ext_package}/accounts', dlm),
+    Service('client', 'accounts-client', auth_version, 'jar', f'{base_url}/{ext_package}/accounts', dlm),
+    Service('auth-plugin', 'accounts-baseline-cenm', cenm_version, 'jar', f'{base_url}/{enm_package}', dlm),
+    Service('gateway', 'gateway-service', gateway_version, 'jar', f'{base_url}/{ext_package}/gateway', dlm),
+    Service('gateway-plugin', 'cenm-gateway-plugin', nms_visual_version, 'jar', f'{base_url}/{enm_package}', dlm),
+    Service('cli', 'cenm-tool', nms_visual_version, 'zip', f'{base_url}/{enm_package}', dlm),
+    Service('idman', 'identitymanager', cenm_version, 'zip', f'{base_url}/{enm_package}/services', dlm),
+    Service('crr-tool', 'crr-submission-tool', cenm_version, 'zip', f'{base_url}/{enm_package}/tools', dlm),
+    Service('nmap', 'networkmap', cenm_version, 'zip', f'{base_url}/{enm_package}/services', dlm),
+    Service('notary', 'corda', corda_version, 'jar', f'{base_url}/{corda_package}', dlm),
+    Service('node', 'corda', corda_version, 'jar', f'{base_url}/{corda_package}', dlm),
+    Service('pki', 'pki-tool', cenm_version, 'zip', f'{base_url}/{enm_package}/tools', dlm),
+    Service('signer', 'signer', cenm_version, 'zip', f'{base_url}/{enm_package}/services', dlm),
+    Service('zone', 'zone', cenm_version, 'zip', f'{base_url}/{enm_package}/services', dlm)
 ]
 
 def main(args: argparse.Namespace):
@@ -357,7 +429,9 @@ def main(args: argparse.Namespace):
     if args.setup_dir_structure:
         for service in global_services:
             download_errors[service.artifact_name] = service.download()
-        
+        database_manager = DatabaseManager(global_services, dlm)
+        download_errors_db = database_manager.download()
+
     if args.generate_certs:
         cert_generator = CertificateGenerator(global_services)
         cert_generator.generate()
@@ -379,7 +453,6 @@ def main(args: argparse.Namespace):
         for service in global_services:
             service.clean(deep=False, artifacts=False, runtime=True)
 
-
     # end of script report
     if args.setup_dir_structure:
         print("")
@@ -391,6 +464,13 @@ def main(args: argparse.Namespace):
                     print(f'Error encountered when downloading {artifact_name}, please check version and try again.')
         else:
             print("All artifacts downloaded successfully.")
+        if any(download_errors_db.values()):
+            print("The following errors were encountered when downloading database drivers:")
+            for artifact_name, error in download_errors_db.items():
+                if error:
+                    print(f'Error encountered when downloading {artifact_name}, please check version and try again.')
+        else:
+            print("All database drivers downloaded successfully.")
 
 if __name__ == '__main__':
     main(parser.parse_args())
