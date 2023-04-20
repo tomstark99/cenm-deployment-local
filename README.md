@@ -26,7 +26,7 @@ next, rename the `.env.template` file to `.env`, here you will fill in your cred
 cd cenm-deployment-local && mv .env.template .env
 ```
 
-Now open the `.env` file and fill in the config options
+Now open the `.env` file and fill in the config options (there are default versions already configured)
 
 ```shell
 ARTIFACTORY_USERNAME=<some>.<one>@r3.com
