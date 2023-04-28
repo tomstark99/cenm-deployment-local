@@ -1,6 +1,8 @@
 import os
+from time import sleep
 from typing import List, Any, Tuple, Dict
 import argparse
+import threading
 
 parser = argparse.ArgumentParser(description='Download CENM artifacts from Artifactory')
 parser.add_argument(
@@ -32,6 +34,12 @@ parser.add_argument(
     default=False, 
     action='store_true', 
     help='Remove all generated service folders'
+)
+parser.add_argument(
+    '--run-default-deployment', 
+    default=False, 
+    action='store_true', 
+    help='Runs a default deployment, following the steps from README'
 )
 
 def is_wget_installed() -> bool:
@@ -88,7 +96,7 @@ dlm = DownloadManager(username, password, wget)
 
 # Define service class to handle downloading and unzipping
 class Service:
-    def __init__(self, abb, artifact_name, version, ext, url, dlm):
+    def __init__(self, abb, artifact_name, version, ext, url, dlm = None):
         self.abb = abb
         self.dir = self._build_dir(abb)
         self.plugin = 'plugin' in abb
@@ -191,6 +199,40 @@ class Service:
             if self.ext == 'zip':
                 os.system(f'(cd cenm-{self.dir} && unzip -q {zip_name} && rm {zip_name})')
         return self.error
+
+    def _register_node(self, artifact_name):
+        os.system(f'(cd cenm-{self.dir} && java -jar {artifact_name}.jar -f {self.dir}.conf --initial-registration --network-root-truststore ./certificates/network-root-truststore.jks --network-root-truststore-password trustpass)')
+
+    def _copy_notary_node_info(self):
+        os.system(f'cp cenm-{self.dir}/nodeInfo-* cenm-nmap')
+        os.system(f'cd cenm-nmap && perl -pe "s/^.*notaryNodeInfoFile: \"\K.*(?=\")/$(ls nodeInfo-*)/" networkparameters.conf')
+
+    def _set_network_params(self):
+        os.system(f'cd cenm-{self.dir} && java -jar networkmap.jar -f networkmap.conf --set-network-parameters networkparameters.conf --network-truststore ./certificates/network-root-truststore.jks --truststore-password trustpass --root-alias cordarootca')
+
+    def deploy(self):
+        print("hiii")
+        if self.dir in ['auth', 'gateway', 'notary', 'node']:
+            artifact_name = f'{self.artifact_name}-{self.version}'
+            if self.dir == 'gateway':
+                os.system(f'(cd cenm-{self.dir}/public && java -jar {artifact_name}.jar -f {artifact_name}.conf &)')
+                os.system(f'(cd cenm-{self.dir}/private && java -jar {artifact_name}.jar -f {artifact_name}.conf)')
+            elif self.dir in ['notary', 'node']:
+                self._register_node(artifact_name)
+                os.system('sleep 60')
+                while True:
+                    os.system(f'(cd cenm-{self.dir} && java -jar {artifact_name}.jar -f {artifact_name}.conf)')
+        elif self.dir == 'nmap':
+                self._copy_notary_node_info()
+                self._set_network_params()
+                os.system(f'(cd cenm-{self.dir} && java -jar {self.artifact_name}.jar -f {self.artifact_name}.conf)')
+        elif self.dir == 'zone':
+            os.system(f'(cd cenm-auth/setup-auth && ./setup-auth.sh)')
+            os.system(f'(cd cenm-{self.dir} && java -jar {self.artifact_name}.jar --driver-class-name=org.h2.Driver --jdbc-driver= --user=zoneuser --password=password --url="jdbc:h2:file:./h2/zone-persistence;DB_CLOSE_ON_EXIT=FALSE;LOCK_TIMEOUT=10000;WRITE_DELAY=0;AUTO_SERVER_PORT=0" --run-migration=true --enm-listener-port=5061 --admin-listener-port=5063 --auth-host=127.0.0.1 --auth-port=8081 --auth-trust-store-location certificates/corda-ssl-trust-store.jks --auth-trust-store-password trustpass --auth-issuer test --auth-leeway 5 --tls=true --tls-keystore=certificates/corda-ssl-identity-manager-keys.jks --tls-keystore-password=password --tls-truststore=certificates/corda-ssl-trust-store.jks --tls-truststore-password=trustpass)')
+        else:
+            print(f'RUNNING: (cd cenm-{self.dir} && java -jar {self.artifact_name}.jar -f {self.artifact_name}.conf)')
+            os.system(f'(cd cenm-{self.dir} && java -jar {self.artifact_name}.jar -f {self.artifact_name}.conf)')
+
 
     def clean(self, 
         deep: bool,
@@ -405,6 +447,32 @@ class DatabaseManager:
         self._distribute_drivers(exists_dict)
         return download_errors
 
+class DeploymentManager:
+
+    def __init__(self, services):
+        self.deployment_services = services
+        self.functions = [s.deploy for s in self.deployment_services]
+        self.threads = []
+
+    def deploy_services(self):
+        service1 = self.deployment_services[0]
+        service2 = self.deployment_services[1]
+        try:
+            print("hi")
+            for function in [service1.deploy, service2.deploy]: #self.functions:
+                print(function)
+                thread = threading.Thread(target=function, daemon=True)
+                self.threads.append(thread)
+                thread.start()
+                print(f'deployed {function} waiting 30 seconds until next service')
+                sleep(30)
+
+            for thread in self.threads:
+                thread.join()
+        except KeyboardInterrupt:
+            sys.exit(1)
+
+
 # Define list of services to download
 global_services = [
     Service('auth', 'accounts-application', auth_version, 'jar', f'{base_url}/{ext_package}/accounts', dlm),
@@ -423,6 +491,18 @@ global_services = [
     Service('zone', 'zone', cenm_version, 'zip', f'{base_url}/{enm_package}/services', dlm)
 ]
 
+# this is the correct deployment order
+deployment_services = [
+    Service('idman', 'identitymanager', cenm_version, 'zip', f'{base_url}/{enm_package}/services'),
+    Service('signer', 'signer', cenm_version, 'zip', f'{base_url}/{enm_package}/services'),
+    Service('notary', 'corda', corda_version, 'jar', f'{base_url}/{corda_package}'),
+    Service('nmap', 'networkmap', cenm_version, 'zip', f'{base_url}/{enm_package}/services'),
+    Service('auth', 'accounts-application', auth_version, 'jar', f'{base_url}/{ext_package}/accounts'),
+    Service('gateway', 'gateway-service', gateway_version, 'jar', f'{base_url}/{ext_package}/gateway'),
+    Service('zone', 'zone', cenm_version, 'zip', f'{base_url}/{enm_package}/services')
+    # Service('node', 'corda', corda_version, 'jar', f'{base_url}/{corda_package}')
+]
+
 def main(args: argparse.Namespace):
 
     download_errors = {}
@@ -435,6 +515,10 @@ def main(args: argparse.Namespace):
     if args.generate_certs:
         cert_generator = CertificateGenerator(global_services)
         cert_generator.generate()
+
+    if args.run_default_deployment:
+        deployment_manager = DeploymentManager(deployment_services)
+        deployment_manager.deploy_services()
 
     if args.clean and args.deep_clean:
         raise ValueError("Cannot use both --clean and --deep-clean flags.")
