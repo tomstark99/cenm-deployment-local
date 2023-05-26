@@ -2,7 +2,10 @@ import os
 from time import sleep
 from typing import List, Any, Tuple, Dict
 import argparse
-import threading
+# import threading
+import multiprocessing
+import logging
+import glob
 
 parser = argparse.ArgumentParser(description='Download CENM artifacts from Artifactory')
 parser.add_argument(
@@ -41,9 +44,25 @@ parser.add_argument(
     action='store_true', 
     help='Runs a default deployment, following the steps from README'
 )
+parser.add_argument(
+    '--version', 
+    default=False, 
+    action='store_true', 
+    help='Show current cenm version'
+)
 
 def is_wget_installed() -> bool:
     return os.system('wget --version > /dev/null 2>&1') == 0
+
+def get_logger():
+    logging.basicConfig(filename=".logs/default-deployment.log",
+                    filemode='a',
+                    format='%(asctime)s,%(msecs)d %(name)s %(levelname)s %(message)s',
+                    datefmt='%H:%M:%S',
+                    level=logging.DEBUG)
+
+    logger = logging.getLogger(__name__)
+    return logger
 
 # Check if .env file exists
 if not os.path.exists(".env"):
@@ -93,6 +112,7 @@ class DownloadManager():
         return False
 
 dlm = DownloadManager(username, password, wget)
+logger = get_logger()
 
 # Define service class to handle downloading and unzipping
 class Service:
@@ -201,36 +221,69 @@ class Service:
         return self.error
 
     def _register_node(self, artifact_name):
+        logger.info(f'Registering {self.dir} to the network')
+        print(f"RUNNING registration COMMAND FOR {self.artifact_name}")
         os.system(f'(cd cenm-{self.dir} && java -jar {artifact_name}.jar -f {self.dir}.conf --initial-registration --network-root-truststore ./certificates/network-root-truststore.jks --network-root-truststore-password trustpass)')
 
     def _copy_notary_node_info(self):
-        os.system(f'cp cenm-{self.dir}/nodeInfo-* cenm-nmap')
-        os.system(f'cd cenm-nmap && perl -pe "s/^.*notaryNodeInfoFile: \"\K.*(?=\")/$(ls nodeInfo-*)/" networkparameters.conf')
+        logger.info(f'Copying notary node info to nmap')
+        while not glob.glob('cenm-notary/nodeInfo-*'):
+            logger.info(f'Waiting for nodeInfo file to be created')
+            sleep(5)
+        os.system(f'cp cenm-notary/nodeInfo-* cenm-nmap')
+        logger.debug(f'Updating networkparameters.conf with node info')
+        os.system(f'(cd cenm-nmap && perl -i -pe "s/^.*notaryNodeInfoFile: \\"\K.*(?=\\")/$(ls nodeInfo-*)/" networkparameters.conf)')
+        new_params = os.system(f'(cd cenm-nmap && cat networkparameters.conf)')
+        logger.info(f'new networkparams {new_params}')
 
     def _set_network_params(self):
+        logger.info(f'Setting network parameters')
         os.system(f'cd cenm-{self.dir} && java -jar networkmap.jar -f networkmap.conf --set-network-parameters networkparameters.conf --network-truststore ./certificates/network-root-truststore.jks --truststore-password trustpass --root-alias cordarootca')
 
     def deploy(self):
-        print("hiii")
+        logger.info(f'Thread started to deploy {self.artifact_name}')
         if self.dir in ['auth', 'gateway', 'notary', 'node']:
             artifact_name = f'{self.artifact_name}-{self.version}'
+            logger.debug(f'Artifact name updated to {artifact_name}')
             if self.dir == 'gateway':
-                os.system(f'(cd cenm-{self.dir}/public && java -jar {artifact_name}.jar -f {artifact_name}.conf &)')
-                os.system(f'(cd cenm-{self.dir}/private && java -jar {artifact_name}.jar -f {artifact_name}.conf)')
+                logger.info(f'Running: (cd cenm-{self.dir}/private && java -jar {artifact_name}.jar -f {self.dir}.conf) to start gateway service')
+                # os.system(f'(cd cenm-{self.dir}/public && java -jar {artifact_name}.jar -f {artifact_name}.conf &)')
+                print(f"RUNNING COMMAND FOR {self.artifact_name}")
+                os.system(f'(cd cenm-{self.dir}/private && java -jar {artifact_name}.jar -f {self.dir}.conf)')
             elif self.dir in ['notary', 'node']:
-                self._register_node(artifact_name)
-                os.system('sleep 60')
+                if not glob.glob('cenm-notary/nodeInfo*'):
+                    logger.info(f'Running: notary registration')
+                    self._register_node(artifact_name)
+                    logger.info(f'Sleeping for 2 minutes to allow registration to complete and for network parameters to be signed')
+                    os.system('sleep 120')
                 while True:
-                    os.system(f'(cd cenm-{self.dir} && java -jar {artifact_name}.jar -f {artifact_name}.conf)')
+                    try:
+                        logger.info(f'Running: (cd cenm-{self.dir} && java -jar {artifact_name}.jar -f {self.dir}.conf) to start {self.dir} service')
+                        cmd = os.system(f'(cd cenm-{self.dir} && java -jar {artifact_name}.jar -f {self.dir}.conf)')
+                        if cmd != 0:
+                            raise RuntimeError(f'{self.dir} service stopped.')
+                    except:
+                        logger.warning(f'{self.dir} service stopped. Restarting...')
+            else:
+                logger.info(f'Running: (cd cenm-{self.dir} && java -jar {artifact_name}.jar -f {self.dir}.conf --initial-user-name admin --initial-user-password p4ssWord --keep-running --verbose) to start {self.dir} service')
+                os.system(f'(cd cenm-{self.dir} && java -jar {artifact_name}.jar -f {self.dir}.conf --initial-user-name admin --initial-user-password p4ssWord --keep-running --verbose)')
+
         elif self.dir == 'nmap':
+            logger.info(f'Service is {self.dir}')
+            if not glob.glob('cenm-nmap/nodeInfo*') and not glob.glob('cenm-notary/nodeInfo*'):
                 self._copy_notary_node_info()
                 self._set_network_params()
-                os.system(f'(cd cenm-{self.dir} && java -jar {self.artifact_name}.jar -f {self.artifact_name}.conf)')
+            logger.info(f'Running: (cd cenm-{self.dir} && java -jar networkmap.jar -f networkmap.conf) to start networkmap service')
+            os.system(f'(cd cenm-{self.dir} && java -jar {self.artifact_name}.jar -f {self.artifact_name}.conf)')
         elif self.dir == 'zone':
-            os.system(f'(cd cenm-auth/setup-auth && ./setup-auth.sh)')
+            logger.info(f'Service is {self.dir}')
+            logger.debug(f'running setupAuth.sh')
+            os.system(f'(cd cenm-auth/setup-auth && bash setupAuth.sh)')
+            logger.debug(f'finished running setupAuth.sh')
+            logger.info(f'Running: (cd cenm-{self.dir} && java -jar {self.artifact_name}.jar --driver-class-name=org.h2.Driver --jdbc-driver= --user=zoneuser --password=password --url="jdbc:h2:file:./h2/zone-persistence;DB_CLOSE_ON_EXIT=FALSE;LOCK_TIMEOUT=10000;WRITE_DELAY=0;AUTO_SERVER_PORT=0" --run-migration=true --enm-listener-port=5061 --admin-listener-port=5063 --auth-host=127.0.0.1 --auth-port=8081 --auth-trust-store-location certificates/corda-ssl-trust-store.jks --auth-trust-store-password trustpass --auth-issuer test --auth-leeway 5 --tls=true --tls-keystore=certificates/corda-ssl-identity-manager-keys.jks --tls-keystore-password=password --tls-truststore=certificates/corda-ssl-trust-store.jks --tls-truststore-password=trustpass) to start {self.dir} service')
             os.system(f'(cd cenm-{self.dir} && java -jar {self.artifact_name}.jar --driver-class-name=org.h2.Driver --jdbc-driver= --user=zoneuser --password=password --url="jdbc:h2:file:./h2/zone-persistence;DB_CLOSE_ON_EXIT=FALSE;LOCK_TIMEOUT=10000;WRITE_DELAY=0;AUTO_SERVER_PORT=0" --run-migration=true --enm-listener-port=5061 --admin-listener-port=5063 --auth-host=127.0.0.1 --auth-port=8081 --auth-trust-store-location certificates/corda-ssl-trust-store.jks --auth-trust-store-password trustpass --auth-issuer test --auth-leeway 5 --tls=true --tls-keystore=certificates/corda-ssl-identity-manager-keys.jks --tls-keystore-password=password --tls-truststore=certificates/corda-ssl-trust-store.jks --tls-truststore-password=trustpass)')
         else:
-            print(f'RUNNING: (cd cenm-{self.dir} && java -jar {self.artifact_name}.jar -f {self.artifact_name}.conf)')
+            logger.info(f'Running: (cd cenm-{self.dir} && java -jar {self.artifact_name}.jar -f {self.artifact_name}.conf)')
             os.system(f'(cd cenm-{self.dir} && java -jar {self.artifact_name}.jar -f {self.artifact_name}.conf)')
 
 
@@ -261,6 +314,8 @@ class Service:
                 for file in files:
                     if file.startswith("nodeInfo"):
                         os.system(f'rm {os.path.join(root, file)}')
+                    if file.startswith("networkparameters"):
+                        os.system(f'perl -i -pe "s/^.*notaryNodeInfoFile: \\"\K.*(?=\\")/INSERT_NODE_INFO_FILE_NAME_HERE/" {os.path.join(root, file)}')
                     if file in runtime_files["notary_files"] and self.dir in ['notary', 'node']:
                         os.system(f'rm {os.path.join(root, file)}')
                 for dir in dirs:
@@ -451,27 +506,47 @@ class DeploymentManager:
 
     def __init__(self, services):
         self.deployment_services = services
-        self.functions = [s.deploy for s in self.deployment_services]
-        self.threads = []
+        self.functions = {s.artifact_name:s.deploy for s in self.deployment_services}
+        self.processes = []
 
     def deploy_services(self):
-        service1 = self.deployment_services[0]
-        service2 = self.deployment_services[1]
+        # service1 = self.deployment_services[0]
+        # service2 = self.deployment_services[1]
         try:
-            print("hi")
-            for function in [service1.deploy, service2.deploy]: #self.functions:
-                print(function)
-                thread = threading.Thread(target=function, daemon=True)
-                self.threads.append(thread)
-                thread.start()
-                print(f'deployed {function} waiting 30 seconds until next service')
+            logger.info("Starting the cenm deployment")
+            logger.info(type(self.functions))
+            logger.info(self.functions)
+            for service, function in self.functions.items():
+                logger.info(f'attempting to deploy {service}')
+                process = multiprocessing.Process(target=function, name=service, daemon=True)
+                # thread = threading.Thread(target=function, daemon=True)
+                self.processes.append(process)
+                process.start()
+                logger.info(f'deployed {service} waiting 30 seconds until next service')
+                sleep(30)
+            
+            while True:
+                logger.info('Running process health check')
+                for process in self.processes:
+                    process.join(timeout=0)
+                    if process.is_alive():
+                        logger.info(f'{process} is healthy')
+                    else:
+                        logger.error(f'{process} is unhealthy, restarting')
+                        process.start()
                 sleep(30)
 
-            for thread in self.threads:
-                thread.join()
         except KeyboardInterrupt:
-            sys.exit(1)
-
+            logger.debug('Keyboard interrupt detected, terminating processes')
+            for process in self.processes:
+                logger.info(f'Terminating {process}')
+                process.terminate()
+                logger.info(f'Waiting for {process} to exit gracefully')
+                process.join()
+            # for process in self.processes:
+            #     process.join()
+            logger.info('All processes terminated, exiting')
+            exit(1)
 
 # Define list of services to download
 global_services = [
@@ -503,22 +578,44 @@ deployment_services = [
     # Service('node', 'corda', corda_version, 'jar', f'{base_url}/{corda_package}')
 ]
 
+class Printer:
+
+    def print_cenm_version(self):
+        print("")
+        print("Cenm local deployment manager")
+        print("=====================================")
+        print(f'Current CENM version:    {cenm_version}')
+        print(f'Current Auth version:    {auth_version}')
+        print(f'Current Gateway version: {gateway_version}')
+        print(f'Current NMS version:     {nms_visual_version}')
+        print("")
+        print(f'Current Corda version:   {corda_version}')
+
+    def print_end_of_script_report(self, download_errors, download_errors_db):
+        print("")
+        print("=== End of script report ===")
+        if any(download_errors.values()):
+            print("The following errors were encountered when downloading artifacts:")
+            for artifact_name, error in download_errors.items():
+                if error:
+                    print(f'Error encountered when downloading {artifact_name}, please check version and try again.')
+        else:
+            print("All artifacts downloaded successfully.")
+        if any(download_errors_db.values()):
+            print("The following errors were encountered when downloading database drivers:")
+            for artifact_name, error in download_errors_db.items():
+                if error:
+                    print(f'Error encountered when downloading {artifact_name}, please check version and try again.')
+        else:
+            print("All database drivers downloaded successfully.")
+
 def main(args: argparse.Namespace):
 
-    download_errors = {}
-    if args.setup_dir_structure:
-        for service in global_services:
-            download_errors[service.artifact_name] = service.download()
-        database_manager = DatabaseManager(global_services, dlm)
-        download_errors_db = database_manager.download()
+    printer = Printer()
 
-    if args.generate_certs:
-        cert_generator = CertificateGenerator(global_services)
-        cert_generator.generate()
-
-    if args.run_default_deployment:
-        deployment_manager = DeploymentManager(deployment_services)
-        deployment_manager.deploy_services()
+    if args.version:
+        printer.print_cenm_version()
+        exit(0)
 
     if args.clean and args.deep_clean:
         raise ValueError("Cannot use both --clean and --deep-clean flags.")
@@ -537,24 +634,24 @@ def main(args: argparse.Namespace):
         for service in global_services:
             service.clean(deep=False, artifacts=False, runtime=True)
 
+    download_errors = {}
+    if args.setup_dir_structure:
+        for service in global_services:
+            download_errors[service.artifact_name] = service.download()
+        database_manager = DatabaseManager(global_services, dlm)
+        download_errors_db = database_manager.download()
+
+    if args.generate_certs:
+        cert_generator = CertificateGenerator(global_services)
+        cert_generator.generate()
+
+    if args.run_default_deployment:
+        deployment_manager = DeploymentManager(deployment_services)
+        deployment_manager.deploy_services()
+
     # end of script report
     if args.setup_dir_structure:
-        print("")
-        print("=== End of script report ===")
-        if any(download_errors.values()):
-            print("The following errors were encountered when downloading artifacts:")
-            for artifact_name, error in download_errors.items():
-                if error:
-                    print(f'Error encountered when downloading {artifact_name}, please check version and try again.')
-        else:
-            print("All artifacts downloaded successfully.")
-        if any(download_errors_db.values()):
-            print("The following errors were encountered when downloading database drivers:")
-            for artifact_name, error in download_errors_db.items():
-                if error:
-                    print(f'Error encountered when downloading {artifact_name}, please check version and try again.')
-        else:
-            print("All database drivers downloaded successfully.")
+        printer.print_end_of_script_report(download_errors, download_errors_db)
 
 if __name__ == '__main__':
     main(parser.parse_args())
