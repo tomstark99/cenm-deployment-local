@@ -12,6 +12,20 @@ if you want to skip having to clone the repo manually and running the script you
 
 You then skip to the [Deployment Order](#deployment-order) section
 
+## One line auto-deployment
+
+If you just need a default deployment of CENM then you can also skip having to run the manual commands in the [Deployment Order](#deployment-order) section. You can also run this command after making any config adjustments and adding plugins that need testing for example.
+
+```shell
+python3 setup_script.py --clean --run-default-deployment
+```
+
+This runs all the commands from the [Deployment Order](#deployment-order) section in python subprocesses, the python program won't exit until you shut down the CENM deployment with a `Ctrl+C`.
+
+A health check runs on the subprocesses every 30 seconds and will restart services if they become unhealthy.
+
+If you already have a CENM deployment you can omit the `--clean` flag and the deployment will run without running the initial registration steps.
+
 ## Getting started
 
 Clone this repo locally:
