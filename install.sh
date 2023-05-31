@@ -23,3 +23,7 @@ read -p "press enter to continue"
 
 printf "Done\n"
 exec rm ./install.sh >/dev/null 2>&1
+
+if [[ ! -z $1 && "$1" == "deploy" ]]; then
+    (cd cenm-deployment-local && python3 setup_script.py --run-default-deployment) 
+fi
