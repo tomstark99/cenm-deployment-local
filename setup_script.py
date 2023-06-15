@@ -296,6 +296,7 @@ class Service:
             'dirs': ["logs", "h2", "ssh", "shell-commands", "djvm", "artemis", "brokers", "additional-node-infos"],
             'notary_files': ["process-id", "network-parameters", "nodekeystore.jks", "truststore.jks", "sslkeystore.jks"]
         }
+        os.system(f'rm .logs/* > /dev/null 2>&1')
         if deep:
             os.system(f'rm -rf cenm-{self.dir}')
             return
@@ -504,8 +505,9 @@ class DatabaseManager:
 
 class DeploymentManager:
 
-    def __init__(self, services):
+    def __init__(self, services, printer):
         self.deployment_services = services
+        self.printer = printer
         self.functions = {s.artifact_name:s.deploy for s in self.deployment_services}
         self.processes = []
 
@@ -514,8 +516,6 @@ class DeploymentManager:
         # service2 = self.deployment_services[1]
         try:
             logger.info("Starting the cenm deployment")
-            logger.info(type(self.functions))
-            logger.info(self.functions)
             for service, function in self.functions.items():
                 logger.info(f'attempting to deploy {service}')
                 process = multiprocessing.Process(target=function, name=service, daemon=True)
@@ -524,6 +524,8 @@ class DeploymentManager:
                 process.start()
                 logger.info(f'deployed {service} waiting 30 seconds until next service')
                 sleep(30)
+
+            self.printer.print_deployment_complete()
             
             while True:
                 logger.info('Running process health check')
@@ -591,6 +593,12 @@ class Printer:
         print("")
         print(f'Current Corda version:   {corda_version}')
 
+    def print_deployment_complete(self):
+        print("")
+        print("=== Deployment complete ===")
+        print("")
+        print("Deployment logs can be found under: .logs/default-deployment.log")
+
     def print_end_of_script_report(self, download_errors, download_errors_db):
         print("")
         print("=== End of script report ===")
@@ -646,7 +654,7 @@ def main(args: argparse.Namespace):
         cert_generator.generate()
 
     if args.run_default_deployment:
-        deployment_manager = DeploymentManager(deployment_services)
+        deployment_manager = DeploymentManager(deployment_services, printer)
         deployment_manager.deploy_services()
 
     # end of script report
