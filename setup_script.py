@@ -27,6 +27,12 @@ parser.add_argument(
     help='Remove all generated run-time files'
 )
 parser.add_argument(
+    '--clean-certs', 
+    default=False, 
+    action='store_true', 
+    help='Remove all generated certificates'
+)
+parser.add_argument(
     '--clean-artifacts', 
     default=False, 
     action='store_true', 
@@ -92,7 +98,25 @@ enm_package = 'r3-enterprise-network-manager/com/r3/enm'
 corda_package = 'corda-releases/net/corda'
 repos = ['auth', 'gateway', 'idman', 'nmap', 'notary', 'node', 'pki', 'signer', 'zone']
 
-class DownloadManager():
+class SystemInteract:
+
+    def run(self, cmd):
+        os.system(cmd)
+
+    def rm(self, path):
+        os.system(f'rm -rf {path}')
+
+    def run_get_exit_code(self, cmd):
+        return os.system(cmd)
+
+    def run_get_stdout(self, cmd):
+        os.system(f'{cmd} > .tmp')
+        with open('.tmp', 'r') as f:
+            out = f.read()
+        os.system('rm .tmp')
+        return out
+
+class DownloadManager:
     def __init__(self, username, password, wget):
         self.username = username
         self.password = password
@@ -111,8 +135,50 @@ class DownloadManager():
                 return True
         return False
 
+class CenmTool:
+    def __init__(self, version):
+        self.host = 'http://127.0.0.1:8089'
+        self.path = 'cenm-gateway/cenm-tool'
+        self.jar = f'cenm-tool-{version}.jar'
+
+    def _run(self, cmd):
+        return sysi.run_get_stdout(f'(cd {self.path} && java -jar {self.jar} {cmd})')
+
+    def _login(self, username, password):
+        self._run(f'context login -s {self.host} -u {username} -p {password}')
+    
+    def _logout(self):
+        self._run(f'context logout {self.host}')
+
+    def create_zone(
+        self,
+        config_file, 
+        network_map_address,
+        network_parameters,
+        label,
+        label_color
+    ):
+        self._login('network-maintainer', 'p4ssWord')
+        token = self._run(f'zone create-subzone --config-file={config_file} --network-map-address={network_map_address} --network-parameters={network_parameters} --label={label} --label-color={label_color}')
+        self._logout()
+        return token
+
+    def set_config(self, service, config_file):
+        self._login('config-maintainer', 'p4ssWord')
+        self._run(f'{service} config set -f={config_file}')
+        self._logout()
+
+    def get_subzones(self):
+        self._login('config-maintainer', 'p4ssWord')
+        subzones = self._run('zone get-subzones')
+        self._logout()
+        zones = sysi.run_get_stdout(f"echo {subzones} | grep id | rev | cut -d ' ' -f 1 | rev | sed -e 's/\,//' | xargs").split(' ')
+        return zones
+
 dlm = DownloadManager(username, password, wget)
 logger = get_logger()
+sysi = SystemInteract()
+cenm_tool = CenmTool(nms_visual_version)
 
 # Define service class to handle downloading and unzipping
 class Service:
@@ -240,12 +306,23 @@ class Service:
         os.system(f'cp cenm-notary/nodeInfo-* cenm-nmap')
         logger.debug(f'Updating networkparameters.conf with node info')
         os.system(f'(cd cenm-nmap && perl -i -pe "s/^.*notaryNodeInfoFile: \\"\K.*(?=\\")/$(ls nodeInfo-*)/" networkparameters.conf)')
-        new_params = os.system(f'(cd cenm-nmap && cat networkparameters.conf)')
-        logger.info(f'new networkparams {new_params}')
+        new_params = sysi.run_get_stdout(f'(cd cenm-nmap && cat networkparameters.conf)')
+        logger.info(f'new networkparams:\n{new_params}')
 
     def _set_network_params(self):
         logger.info(f'Setting network parameters')
         os.system(f'cd cenm-{self.dir} && java -jar networkmap.jar -f networkmap.conf --set-network-parameters networkparameters.conf --network-truststore ./certificates/network-root-truststore.jks --truststore-password trustpass --root-alias cordarootca')
+
+    def _create_subzone(self):
+        logger.info(f'Creating subzone')
+        token = cenm_tool.create_zone("../../cenm-nmap/networkmap.conf", "127.0.0.1:20000", "../../cenm-nmap/networkparameters.conf", "Main", "#941213")
+        logger.info(f'Network map token: {token}')
+        logger.info("Applying identity manager config to subzone")
+        token = cenm_tool.set_config("identity-manager", "../../cenm-idman/identitymanager.conf")
+        logger.info(f'Identity manager token: {token}')
+        logger.info("Applying signer config to subzone")
+        token = cenm_tool.set_config("signer", "../../cenm-signer/signer.conf")
+        logger.info(f'Signer token: {token}')
 
     def deploy(self):
         logger.info(f'Thread started to deploy {self.artifact_name}')
@@ -287,8 +364,9 @@ class Service:
             logger.debug(f'running setupAuth.sh')
             os.system(f'(cd cenm-auth/setup-auth && bash setupAuth.sh)')
             logger.debug(f'finished running setupAuth.sh')
-            logger.info(f'Running: (cd cenm-{self.dir} && java -jar {self.artifact_name}.jar --driver-class-name=org.h2.Driver --jdbc-driver= --user=zoneuser --password=password --url="jdbc:h2:file:./h2/zone-persistence;DB_CLOSE_ON_EXIT=FALSE;LOCK_TIMEOUT=10000;WRITE_DELAY=0;AUTO_SERVER_PORT=0" --run-migration=true --enm-listener-port=5061 --admin-listener-port=5063 --auth-host=127.0.0.1 --auth-port=8081 --auth-trust-store-location certificates/corda-ssl-trust-store.jks --auth-trust-store-password trustpass --auth-issuer test --auth-leeway 5 --tls=true --tls-keystore=certificates/corda-ssl-identity-manager-keys.jks --tls-keystore-password=password --tls-truststore=certificates/corda-ssl-trust-store.jks --tls-truststore-password=trustpass) to start {self.dir} service')
-            os.system(f'(cd cenm-{self.dir} && java -jar {self.artifact_name}.jar --driver-class-name=org.h2.Driver --jdbc-driver= --user=zoneuser --password=password --url="jdbc:h2:file:./h2/zone-persistence;DB_CLOSE_ON_EXIT=FALSE;LOCK_TIMEOUT=10000;WRITE_DELAY=0;AUTO_SERVER_PORT=0" --run-migration=true --enm-listener-port=5061 --admin-listener-port=5063 --auth-host=127.0.0.1 --auth-port=8081 --auth-trust-store-location certificates/corda-ssl-trust-store.jks --auth-trust-store-password trustpass --auth-issuer test --auth-leeway 5 --tls=true --tls-keystore=certificates/corda-ssl-identity-manager-keys.jks --tls-keystore-password=password --tls-truststore=certificates/corda-ssl-trust-store.jks --tls-truststore-password=trustpass)')
+            # self._create_subzone() # Can't create subzone without zone service running
+            logger.info(f'Running: (cd cenm-{self.dir} && java -jar {self.artifact_name}.jar --driver-class-name=org.h2.Driver --jdbc-driver= --user=zoneuser --password=password --url="jdbc:h2:file:./h2/zone-persistence;DB_CLOSE_ON_EXIT=FALSE;LOCK_TIMEOUT=10000;WRITE_DELAY=0;AUTO_SERVER_PORT=0" --run-migration=true --enm-listener-port=5061 --admin-listener-port=5063 --auth-host=127.0.0.1 --auth-port=8081 --auth-trust-store-location certificates/corda-ssl-trust-store.jks --auth-trust-store-password trustpass --auth-issuer "http://test" --auth-leeway 5 --tls=true --tls-keystore=certificates/corda-ssl-identity-manager-keys.jks --tls-keystore-password=password --tls-truststore=certificates/corda-ssl-trust-store.jks --tls-truststore-password=trustpass) to start {self.dir} service')
+            os.system(f'(cd cenm-{self.dir} && java -jar {self.artifact_name}.jar --driver-class-name=org.h2.Driver --jdbc-driver= --user=zoneuser --password=password --url="jdbc:h2:file:./h2/zone-persistence;DB_CLOSE_ON_EXIT=FALSE;LOCK_TIMEOUT=10000;WRITE_DELAY=0;AUTO_SERVER_PORT=0" --run-migration=true --enm-listener-port=5061 --admin-listener-port=5063 --auth-host=127.0.0.1 --auth-port=8081 --auth-trust-store-location certificates/corda-ssl-trust-store.jks --auth-trust-store-password trustpass --auth-issuer "http://test" --auth-leeway 5 --tls=true --tls-keystore=certificates/corda-ssl-identity-manager-keys.jks --tls-keystore-password=password --tls-truststore=certificates/corda-ssl-trust-store.jks --tls-truststore-password=trustpass)')
         else:
             logger.info(f'Running: (cd cenm-{self.dir} && java -jar {self.artifact_name}.jar -f {self.artifact_name}.conf)')
             os.system(f'(cd cenm-{self.dir} && java -jar {self.artifact_name}.jar -f {self.artifact_name}.conf)')
@@ -297,11 +375,12 @@ class Service:
     def clean(self, 
         deep: bool,
         artifacts: bool,
+        certs: bool,
         runtime: bool
     ):
         runtime_files = {
             'dirs': ["logs", "h2", "ssh", "shell-commands", "djvm", "artemis", "brokers", "additional-node-infos"],
-            'notary_files': ["process-id", "network-parameters", "nodekeystore.jks", "truststore.jks", "sslkeystore.jks"]
+            'notary_files': ["process-id", "network-parameters", "nodekeystore.jks", "truststore.jks", "sslkeystore.jks", "certificate-request-id.txt"]
         }
         os.system(f'rm .logs/* > /dev/null 2>&1')
         if deep:
@@ -318,23 +397,31 @@ class Service:
                         os.system(f'rm {os.path.join(root, file)}')
                     elif file in ["cenm", "cenm.cmd"]:
                         os.system(f'rm {os.path.join(root, file)}')
+                for dir in dirs:
+                    if self.dir == "idman":
+                        if os.path.join(root, dir).split("/")[-2] == "tools":
+                            os.system(f'rm -rf {os.path.join(root, dir)}')
+            if certs:
+                for file in files:
+                    if file.endswith('.jks'):
+                        os.system(f'rm {os.path.join(root, file)}')
+                    elif file.endswith('.crl'):
+                        os.system(f'rm {os.path.join(root, file)}')
+                for dir in dirs:
+                    if self.dir == "pki":
+                        if dir in ["crl-files", "trust-stores", "key-stores"]:
+                            os.system(f'rm -rf {os.path.join(root, dir)}')
             if runtime:
                 for file in files:
                     if file.startswith("nodeInfo"):
                         os.system(f'rm {os.path.join(root, file)}')
-                    if file.startswith("networkparameters"):
+                    elif file.startswith("networkparameters"):
                         os.system(f'perl -i -pe "s/^.*notaryNodeInfoFile: \\"\K.*(?=\\")/INSERT_NODE_INFO_FILE_NAME_HERE/" {os.path.join(root, file)}')
-                    if file in runtime_files["notary_files"] and self.dir in ['notary', 'node']:
+                    elif file in runtime_files["notary_files"] and self.dir in ['notary', 'node']:
                         os.system(f'rm {os.path.join(root, file)} > /dev/null 2>&1')
                 for dir in dirs:
                     if dir in runtime_files["dirs"]:
                         os.system(f'rm -rf {os.path.join(root, dir)}')
-                    if self.dir == "idman":
-                        if os.path.join(root, dir).split("/")[-2] == "tools":
-                            os.system(f'rm -rf {os.path.join(root, dir)}')
-                    if self.dir == "pki":
-                        if dir in ["crl-files", "trust-stores", "key-stores"]:
-                            os.system(f'rm -rf {os.path.join(root, dir)}')
 
 class CertificateGenerator:
     def __init__(self, services: List[Service]):
@@ -380,8 +467,8 @@ class CertificateGenerator:
         self._copy('trust-stores/corda-ssl-trust-store.jks', 'cenm-gateway/private/certificates')
         self._copy('trust-stores/corda-ssl-trust-store.jks', 'cenm-gateway/public/certificates')
         # key stores
-        self._copy('key-stores/gateway-private-ssl-keys.jks', 'cenm-gateway/private/certificates')
-        self._copy('key-stores/gateway-ssl-keys.jks', 'cenm-gateway/public/certificates')
+        self._copy('key-stores/corda-ssl-identity-manager-keys.jks', 'cenm-gateway/private/certificates')
+        self._copy('key-stores/corda-ssl-identity-manager-keys.jks', 'cenm-gateway/public/certificates')
 
     def _idman(self):
         # trust stores
@@ -443,6 +530,11 @@ class CertificateGenerator:
                 certs[path] = True
             else:
                 certs[path] = False
+        if os.path.exists(f'cenm-auth/certificates/jwt-store.jks'):
+            print('Auth jwt-store already exists. Skipping generation.')
+        else:
+            print('Generating auth jwt-store')
+            os.system(f'(cd cenm-auth && keytool -genkeypair -alias oauth-test-jwt -keyalg RSA -keypass password -keystore certificates/jwt-store.jks -storepass password -dname "CN=abc1, OU=abc2, O=abc3, L=abc4, ST=abc5, C=abc6" > /dev/null 2>&1)')
 
         if not all(certs.values()):
             print('Generating certificates')
@@ -542,7 +634,11 @@ class DeploymentManager:
                         logger.info(f'{process} is healthy')
                     else:
                         logger.error(f'{process} is unhealthy, restarting')
-                        process.start()
+                        process.terminate()
+                        self.processes.remove(process)
+                        new_process = multiprocessing.Process(target=self.functions[process.name], name=process.name, daemon=True)
+                        new_process.start()
+                        self.processes.append(new_process)
                 sleep(30)
 
         except KeyboardInterrupt:
@@ -633,22 +729,22 @@ def main(args: argparse.Namespace):
         printer.print_cenm_version()
         exit(0)
 
-    if args.clean and args.deep_clean:
-        raise ValueError("Cannot use both --clean and --deep-clean flags.")
-    if args.clean and args.clean_artifacts:
-        raise ValueError("Cannot use both --clean and --clean-artifacts flags.")
-    if args.deep_clean and args.clean_artifacts:
-        raise ValueError("Cannot use both --deep-clean and --clean-artifacts flags.")
+    clean_args = [args.clean, args.deep_clean, args.clean_artifacts, args.clean_certs]
+    if sum(clean_args) > 1:
+        raise ValueError("Cannot use more than one of the following flags: --clean, --deep-clean, --clean-artifacts, --clean-certs")
 
     if args.deep_clean:
         for service in global_services:
-            service.clean(deep=True, artifacts=False, runtime=False)
+            service.clean(deep=True, artifacts=False, certs=False, runtime=False)
     elif args.clean_artifacts:
         for service in global_services:
-            service.clean(deep=False, artifacts=True, runtime=True)
+            service.clean(deep=False, artifacts=True, certs=True, runtime=True)
     elif args.clean:
         for service in global_services:
-            service.clean(deep=False, artifacts=False, runtime=True)
+            service.clean(deep=False, artifacts=False, certs=False, runtime=True)
+    elif args.clean_certs:
+        for service in global_services:
+            service.clean(deep=False, artifacts=False, certs=True, runtime=False)
 
     download_errors = {}
     if args.setup_dir_structure:
