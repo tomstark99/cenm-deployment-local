@@ -52,8 +52,12 @@ options:
                         Create directory structure for CENM deployment and download all current artifacts
   --generate-certs      Generate certificates and distribute them to services
   --clean               Remove all generated run-time files
+  --clean-certs         Remove all generated certificates
   --clean-artifacts     Remove all downloaded artifacts and generated certificates
   --deep-clean          Remove all generated service folders
+  --run-default-deployment
+                        Runs a default deployment, following the steps from README
+  --version             Show current cenm version
 ```
 
 The following command will download all the config files in the correct directories as well as download all the artifacts with the versions specified in `.env`:
@@ -215,7 +219,7 @@ CENM services should be deployed in a particular order, this being:
 
     Make a note of the zone token that is returned in case you need it later (for example if you are using the angel service)
 
-14. Set zone config
+14. Set your zone config
 
     Set the 'Main' zone config to be the same as the global zone, for this you will need the `config-maintainer` login
 
@@ -231,7 +235,7 @@ CENM services should be deployed in a particular order, this being:
 
     Again, make a note of the zone token that is returned in case you need it later (for example if you are using the angel service)
     
-12. Run the `setupAuth.sh` script to add users to the auth service
+15. Run the `setupAuth.sh` script to add users to the auth service
     
     To grant your users access to the new subzone, replace the `<SUBZONE_ID>` with the id returned from
 
