@@ -181,7 +181,7 @@ CENM services should be deployed in a particular order, this being:
         --auth-port=8081 \
         --auth-trust-store-location certificates/corda-ssl-trust-store.jks \
         --auth-trust-store-password trustpass \
-        --auth-issuer test \
+        --auth-issuer "http://test" \
         --auth-leeway 5 \
         --tls=true \
         --tls-keystore=certificates/corda-ssl-identity-manager-keys.jks \
@@ -189,13 +189,70 @@ CENM services should be deployed in a particular order, this being:
         --tls-truststore=certificates/corda-ssl-trust-store.jks \
         --tls-truststore-password=trustpass
     ```
+
+12. Verify your gateway is up by navigating to http://localhost:8089
+
+13. Create a 'Main' subzone
+
+    Navigate to the cenm-tool directory
+
+    ```shell
+    cd cenm-gateway/cenm-tool
+    ```
+
+    For creating a subzone, you need the `network-maintainer` login
+
+    ```shell
+    ./cenm context login -s http://127.0.0.1:8089 -u network-maintainer -p <password>
+    ./cenm zone create-subzone \
+        --config-file=../../cenm-nmap/networkmap.conf \
+        --network-map-address=127.0.0.1:20000 \
+        --network-parameters=../../cenm-nmap/networkparameters.conf \
+        --label=Main \
+        --label-color='#941213' \
+        --zone-token
+    ```
+
+    Make a note of the zone token that is returned in case you need it later (for example if you are using the angel service)
+
+14. Set zone config
+
+    Set the 'Main' zone config to be the same as the global zone, for this you will need the `config-maintainer` login
+
+    ```shell
+    ./cenm context login -s http://127.0.0.1:8089 -u config-maintainer -p <password>
+    ./cenm identity-manager config set \
+        --config-file=../../cenm-idman/identitymanager.conf \
+        --zone-token
+    ./cenm signer config set \
+        --config-file=../../cenm-signer/signer.conf \
+        --zone-token
+    ```
+
+    Again, make a note of the zone token that is returned in case you need it later (for example if you are using the angel service)
     
 12. Run the `setupAuth.sh` script to add users to the auth service
     
+    To grant your users access to the new subzone, replace the `<SUBZONE_ID>` with the id returned from
+
+    ```shell
+    ./cenm context login -s http://127.0.0.1:8089 -u config-maintainer -p <password>
+    ./cenm zone get-subzones
+    ```
+
+    The user roles are located in the cenm-auth directory, in the example below the zone id is `1` which should be substituted `"s//<here>/g"` in the `perl` command
+
+    ```shell
+    cd cenm-auth/setup-auth/roles
+    for file in *.json; do perl -i -pe "s/<SUBZONE_ID>/1/g" $file; done
+    ```
+
+    After this run:
+
     ```shell
     setupAuth.sh
     ```
 
     _Note: this script requires [jq](https://stedolan.github.io/jq/download/), a command line JSON processor that can be installed easily in various ways._
     
-13. Verify your gateway is up by navigating to http://localhost:8089
+
