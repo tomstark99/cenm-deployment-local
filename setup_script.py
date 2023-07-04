@@ -325,7 +325,7 @@ class Service:
                     if file.startswith("networkparameters"):
                         os.system(f'perl -i -pe "s/^.*notaryNodeInfoFile: \\"\K.*(?=\\")/INSERT_NODE_INFO_FILE_NAME_HERE/" {os.path.join(root, file)}')
                     if file in runtime_files["notary_files"] and self.dir in ['notary', 'node']:
-                        os.system(f'rm {os.path.join(root, file)}')
+                        os.system(f'rm {os.path.join(root, file)} > /dev/null 2>&1')
                 for dir in dirs:
                     if dir in runtime_files["dirs"]:
                         os.system(f'rm -rf {os.path.join(root, dir)}')
