@@ -136,6 +136,8 @@ class Service:
             return 'gateway'
         elif abb == 'crr-tool':
             return 'idman'
+        elif abb == 'shell':
+            return 'node'
         else:
             return abb
 
@@ -183,6 +185,9 @@ class Service:
         if self.ext == 'zip':
             os.system(f'(cd cenm-idman/tools/{self.artifact_name} && unzip -q {zip_name} && rm {zip_name})')
 
+    def _install_corda_shell(self, zip_name):
+        os.system(f'mv {zip_name} cenm-node/drivers/{zip_name}')
+
     # download command that fetches the artifact from artifactory
     def download(self):
         zip_name = f'{self.artifact_name}-{self.version}.{self.ext}'
@@ -214,6 +219,8 @@ class Service:
             self._handle_gateway(zip_name)
         elif self.artifact_name in ['crr-submission-tool']:
             self._install_idman_tool(zip_name)
+        elif self.artifact_name in ['corda-shell']:
+            self._install_corda_shell(zip_name)
         else:
             os.system(f'mv {zip_name} cenm-{self.dir}')
             if self.ext == 'zip':
@@ -474,7 +481,7 @@ class DatabaseManager:
         return exists_in_service
 
     def _cleanup(self, driver):
-        os.system(f'rm {self._get_jar_name(driver)}')
+        os.system(f'rm {self._get_jar_name(driver)} > /dev/null 2>&1')
 
     def _distribute_drivers(self, exists_dict):
         for service in self.db_services:
@@ -563,6 +570,7 @@ global_services = [
     Service('nmap', 'networkmap', cenm_version, 'zip', f'{base_url}/{enm_package}/services', dlm),
     Service('notary', 'corda', corda_version, 'jar', f'{base_url}/{corda_package}', dlm),
     Service('node', 'corda', corda_version, 'jar', f'{base_url}/{corda_package}', dlm),
+    Service('shell', 'corda-shell', corda_version, 'jar', f'{base_url}/{corda_package}', dlm),
     Service('pki', 'pki-tool', cenm_version, 'zip', f'{base_url}/{enm_package}/tools', dlm),
     Service('signer', 'signer', cenm_version, 'zip', f'{base_url}/{enm_package}/services', dlm),
     Service('zone', 'zone', cenm_version, 'zip', f'{base_url}/{enm_package}/services', dlm)
