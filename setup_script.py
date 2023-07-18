@@ -1,4 +1,8 @@
 import os
+import sys
+if f'{os.getcwd()}/.src' not in sys.path:
+    sys.path.append(f'{os.getcwd()}/.src')
+
 from time import sleep
 from typing import List, Any, Tuple, Dict
 import argparse
@@ -60,15 +64,15 @@ parser.add_argument(
 def is_wget_installed() -> bool:
     return os.system('wget --version > /dev/null 2>&1') == 0
 
-def get_logger():
-    logging.basicConfig(filename=".logs/default-deployment.log",
-                    filemode='a',
-                    format='%(asctime)s,%(msecs)d %(name)s %(levelname)s %(message)s',
-                    datefmt='%H:%M:%S',
-                    level=logging.DEBUG)
+# def get_logger():
+#     logging.basicConfig(filename=".logs/default-deployment.log",
+#                     filemode='a',
+#                     format='%(asctime)s,%(msecs)d %(name)s %(levelname)s %(message)s',
+#                     datefmt='%H:%M:%S',
+#                     level=logging.DEBUG)
 
-    logger = logging.getLogger(__name__)
-    return logger
+#     logger = logging.getLogger(__name__)
+#     return logger
 
 # Check if .env file exists
 if not os.path.exists(".env"):
@@ -176,7 +180,7 @@ class CenmTool:
         return zones
 
 dlm = DownloadManager(username, password, wget)
-logger = get_logger()
+# logger = get_logger()
 sysi = SystemInteract()
 cenm_tool = CenmTool(nms_visual_version)
 
@@ -721,7 +725,42 @@ class Printer:
         else:
             print("All database drivers downloaded successfully.")
 
+from managers.service_manager import ServiceManager
+
 def main(args: argparse.Namespace):
+
+    clean_args = [args.clean, args.deep_clean, args.clean_artifacts, args.clean_certs]
+    if sum(clean_args) > 1:
+        raise ValueError("Cannot use more than one of the following flags: --clean, --deep-clean, --clean-artifacts, --clean-certs")
+
+    service_manager = ServiceManager(
+        username,
+        password,
+        auth_version,
+        gateway_version,
+        cenm_version,
+        nms_visual_version,
+        corda_version
+    )
+
+    service_manager.clean_all(
+        args.deep_clean,
+        args.clean_artifacts,
+        args.clean_certs,
+        args.clean
+    )
+
+    if args.setup_dir_structure:
+        service_manager.download_all()
+
+    if args.generate_certs:
+        service_manager.generate_certificates()
+
+    if args.run_default_deployment:
+        service_manager.deploy_all()
+
+
+    exit(0)
 
     printer = Printer()
 
@@ -729,9 +768,6 @@ def main(args: argparse.Namespace):
         printer.print_cenm_version()
         exit(0)
 
-    clean_args = [args.clean, args.deep_clean, args.clean_artifacts, args.clean_certs]
-    if sum(clean_args) > 1:
-        raise ValueError("Cannot use more than one of the following flags: --clean, --deep-clean, --clean-artifacts, --clean-certs")
 
     if args.deep_clean:
         for service in global_services:
