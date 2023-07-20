@@ -20,4 +20,4 @@ read -p "press enter to continue"
 (cd cenm-deployment-local && python3 setup_script.py --setup-dir-structure --generate-certs)
 
 printf "Done\n"
-exec rm ./install.sh >/dev/null 2>&1
+# exec rm ./install.sh > /dev/null 2>&1
