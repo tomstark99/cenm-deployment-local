@@ -155,6 +155,10 @@ class Service:
         if self.ext == 'zip':
             os.system(f'(cd cenm-idman/tools/{self.artifact_name} && unzip -q {zip_name} && rm {zip_name})')
 
+    def _install_corda_shell(self, zip_name):
+        os.system(f'cp {zip_name} cenm-notary/drivers/{zip_name}')
+        os.system(f'mv {zip_name} cenm-node/drivers/{zip_name}')
+
     # download command that fetches the artifact from artifactory
     def download(self):
         zip_name = f'{self.artifact_name}-{self.version}.{self.ext}'
@@ -186,6 +190,8 @@ class Service:
             self._handle_gateway(zip_name)
         elif self.artifact_name in ['crr-submission-tool']:
             self._install_idman_tool(zip_name)
+        elif self.artifact_name in ['corda-shell']:
+            self._install_corda_shell(zip_name)
         else:
             os.system(f'mv {zip_name} cenm-{self.dir}')
             if self.ext == 'zip':
@@ -199,7 +205,7 @@ class Service:
     ):
         runtime_files = {
             'dirs': ["logs", "h2", "ssh", "shell-commands", "djvm", "artemis", "brokers", "additional-node-infos"],
-            'notary_files': ["process-id", "network-parameters", "nodekeystore.jks", "truststore.jks", "sslkeystore.jks"]
+            'notary_files': ["process-id", "network-parameters", "nodekeystore.jks", "truststore.jks", "sslkeystore.jks", "certificate-request-id.txt"]
         }
         if deep:
             os.system(f'rm -rf cenm-{self.dir}')
@@ -215,18 +221,21 @@ class Service:
                         os.system(f'rm {os.path.join(root, file)}')
                     elif file in ["cenm", "cenm.cmd"]:
                         os.system(f'rm {os.path.join(root, file)}')
+                for dir in dirs:
+                    if self.dir == "idman":
+                        if os.path.join(root, dir).split("/")[-2] == "tools":
+                            os.system(f'rm -rf {os.path.join(root, dir)}')
             if runtime:
                 for file in files:
                     if file.startswith("nodeInfo"):
                         os.system(f'rm {os.path.join(root, file)}')
-                    if file in runtime_files["notary_files"] and self.dir in ['notary', 'node']:
-                        os.system(f'rm {os.path.join(root, file)}')
+                    elif file.startswith("networkparameters"):
+                        os.system(f'perl -i -pe "s/^.*notaryNodeInfoFile: \\"\K.*(?=\\")/INSERT_NODE_INFO_FILE_NAME_HERE/" {os.path.join(root, file)}')
+                    elif file in runtime_files["notary_files"] and self.dir in ['notary', 'node']:
+                        os.system(f'rm {os.path.join(root, file)} > /dev/null 2>&1')
                 for dir in dirs:
                     if dir in runtime_files["dirs"]:
                         os.system(f'rm -rf {os.path.join(root, dir)}')
-                    if self.dir == "idman":
-                        if os.path.join(root, dir).split("/")[-2] == "tools":
-                            os.system(f'rm -rf {os.path.join(root, dir)}')
                     if self.dir == "pki":
                         if dir in ["crl-files", "trust-stores", "key-stores"]:
                             os.system(f'rm -rf {os.path.join(root, dir)}')
@@ -275,8 +284,8 @@ class CertificateGenerator:
         self._copy('trust-stores/corda-ssl-trust-store.jks', 'cenm-gateway/private/certificates')
         self._copy('trust-stores/corda-ssl-trust-store.jks', 'cenm-gateway/public/certificates')
         # key stores
-        self._copy('key-stores/gateway-private-ssl-keys.jks', 'cenm-gateway/private/certificates')
-        self._copy('key-stores/gateway-ssl-keys.jks', 'cenm-gateway/public/certificates')
+        self._copy('key-stores/corda-ssl-identity-manager-keys.jks', 'cenm-gateway/private/certificates')
+        self._copy('key-stores/corda-ssl-identity-manager-keys.jks', 'cenm-gateway/public/certificates')
 
     def _idman(self):
         # trust stores
@@ -338,6 +347,12 @@ class CertificateGenerator:
                 certs[path] = True
             else:
                 certs[path] = False
+
+        if os.path.exists(f'cenm-auth/certificates/jwt-store.jks'):
+            print('Auth jwt-store already exists. Skipping generation.')
+        else:
+            print('Generating auth jwt-store')
+            os.system(f'(cd cenm-auth && keytool -genkeypair -alias oauth-test-jwt -keyalg RSA -keypass password -keystore certificates/jwt-store.jks -storepass password -dname "CN=abc1, OU=abc2, O=abc3, L=abc4, ST=abc5, C=abc6" > /dev/null 2>&1)')
 
         if not all(certs.values()):
             print('Generating certificates')
@@ -418,6 +433,7 @@ global_services = [
     Service('nmap', 'networkmap', cenm_version, 'zip', f'{base_url}/{enm_package}/services', dlm),
     Service('notary', 'corda', corda_version, 'jar', f'{base_url}/{corda_package}', dlm),
     Service('node', 'corda', corda_version, 'jar', f'{base_url}/{corda_package}', dlm),
+    Service('shell', 'corda-shell', corda_version, 'jar', f'{base_url}/{corda_package}', dlm),
     Service('pki', 'pki-tool', cenm_version, 'zip', f'{base_url}/{enm_package}/tools', dlm),
     Service('signer', 'signer', cenm_version, 'zip', f'{base_url}/{enm_package}/services', dlm),
     Service('zone', 'zone', cenm_version, 'zip', f'{base_url}/{enm_package}/services', dlm)
