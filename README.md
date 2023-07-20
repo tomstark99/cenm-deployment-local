@@ -231,9 +231,7 @@ CENM services should be deployed in a particular order, this being:
 
     Again, make a note of the zone token that is returned in case you need it later (for example if you are using the angel service)
     
-15. Run the `setupAuth.sh` script to add users to the auth service
-    
-    To grant your users access to the new subzone, replace the `<SUBZONE_ID>` with the id returned from
+15. To grant your users access to the new subzone, replace the `<SUBZONE_ID>` with the id returned from
 
     ```shell
     ./cenm context login -s http://127.0.0.1:8089 -u config-maintainer -p <password>
