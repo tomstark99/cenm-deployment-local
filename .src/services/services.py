@@ -1,14 +1,19 @@
 from services.base_services import BaseService, DeploymentService, NodeDeploymentService
 from managers.certificate_manager import CertificateManager
-from utils import CenmTool, Constants
+from utils import Constants
 from time import sleep
-from typing import Dict
 import glob
 import os
 import threading
 
 
 class AuthService(DeploymentService):
+
+    def clean_runtime(self):
+        self.sysi.run('(cd cenm-auth/setup-auth/roles && for file in *.json; do perl -0777 -i -pe "s/objectName\\": \\"global\\".*'
+            + "\n".encode("unicode_escape").decode("utf-8")
+            + '.*objectName\\": \\"\K.*(?=\\")/<SUBZONE_ID>/g" $file; done)')
+        super().clean_runtime()
 
     def deploy(self):
         self.logger.info(f'Thread started to deploy {self.artifact_name}')
@@ -162,12 +167,6 @@ class NetworkMapService(DeploymentService):
         self.logger.info(f'Setting network parameters')
         self.sysi.run(f'cd {self.dir} && java -jar networkmap.jar -f networkmap.conf --set-network-parameters networkparameters.conf --network-truststore ./certificates/network-root-truststore.jks --truststore-password trustpass --root-alias cordarootca')
 
-    def deploy(self):
-        if not self._node_info():
-            self._copy_notary_node_info()
-            self._set_network_params()
-        super().deploy()
-
     def clean_runtime(self):
         for root, dirs, files in os.walk(self.dir):
             for file in files:
@@ -176,6 +175,12 @@ class NetworkMapService(DeploymentService):
                 if file.startswith("networkparameters"):
                     self.sysi.run(f'perl -i -pe "s/^.*notaryNodeInfoFile: \\"\K.*(?=\\")/INSERT_NODE_INFO_FILE_NAME_HERE/" {os.path.join(root, file)}')
         super().clean_runtime()
+
+    def deploy(self):
+        if not self._node_info():
+            self._copy_notary_node_info()
+            self._set_network_params()
+        super().deploy()
 
 class NotaryService(NodeDeploymentService):
     pass
@@ -220,11 +225,9 @@ class PkiToolService(BaseService):
         return self.error
 
     def generate(self):
-        # self.logger.info(f'Generating certificates with {self.artifact_name}')
         cert_manager = CertificateManager()
         exit_code = -1
         while exit_code != 0:
-            # self.logger.debug(f'[Running] (cd cenm-pki && java -jar pkitool.jar -f pki.conf) to generate certs')
             exit_code = cert_manager.generate()
 
     def clean_runtime(self):
@@ -255,32 +258,7 @@ class SignerService(DeploymentService):
 
 class ZoneService(DeploymentService):
 
-    def _get_version_dict(self) -> Dict[str, str]:
-        with open(".env", 'r') as f:
-            args = {key:value for (key,value) in [x.strip().split('=') for x in f.readlines()]}
-        return args
-
-    def _setup_auth(self):
-        versions = self._get_version_dict()
-        cenm_tool = CenmTool(versions['NMS_VISUAL_VERSION'])
-        self.logger.info("Sleeping for 30 seconds to allow Zone to start")
-        self.sysi.sleep(30)
-        # TODO: Add setup subzone here and then run setupAuth.sh with subzone id
-
-        tokens = cenm_tool.cenm_subzone_deployment_init()
-        self.logger.info(f"Subzone tokens: {tokens}")
-
-        zones = cenm_tool.get_subzones()
-        if len(zones) > 0:
-            self.logger.info(f"Subzones: {zones}, will only set permissions for {zones[0]}")
-            self.sysi.run(f'(cd cenm-auth/setup-auth/roles && for file in *.json; do perl -i -pe "s/<SUBZONE_ID>/{zones[0]}/g" $file; done)')
-
-        self.logger.info("Running setupAuth.sh")
-        self.sysi.run("(cd cenm-auth/setup-auth && bash setupAuth.sh)")
-
     def deploy(self):
-        setup_auth_process = threading.Thread(target=self._setup_auth, daemon=True)
-        setup_auth_process.start()
         while True:
             try:
                 self.logger.debug(f'Running: (cd {self.dir} && java -jar {self.artifact_name}.jar --driver-class-name=org.h2.Driver --jdbc-driver= --user=zoneuser --password=password --url="jdbc:h2:file:./h2/zone-persistence;DB_CLOSE_ON_EXIT=FALSE;LOCK_TIMEOUT=10000;WRITE_DELAY=0;AUTO_SERVER_PORT=0" --run-migration=true --enm-listener-port=5061 --admin-listener-port=5063 --auth-host=127.0.0.1 --auth-port=8081 --auth-trust-store-location certificates/corda-ssl-trust-store.jks --auth-trust-store-password trustpass --auth-issuer "http://test" --auth-leeway 5 --tls=true --tls-keystore=certificates/corda-ssl-identity-manager-keys.jks --tls-keystore-password=password --tls-truststore=certificates/corda-ssl-trust-store.jks --tls-truststore-password=trustpass) to start zone service')

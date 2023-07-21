@@ -95,6 +95,11 @@ class DeploymentService(BaseService):
     Args:
         passed to BaseService constructor (see above)
 
+        deployment_time:
+            The time taken for the service to deploy (average)
+            this gives an indication how long the deployment manager
+            should sleep before starting the next service
+
     """
     def __init__(self,
         abb: str,
@@ -104,7 +109,8 @@ class DeploymentService(BaseService):
         ext: str, 
         url: str,
         username: str,
-        password: str
+        password: str,
+        deployment_time: int
     ):
         super().__init__(
             abb, 
@@ -119,6 +125,7 @@ class DeploymentService(BaseService):
         logging_manager = Logger()
         self.logger = logging_manager.get_logger(dir)
         self.runtime_files = Constants.RUNTIME_FILES.value
+        self.deployment_time = deployment_time
 
     def __str__(self) -> str:
         return f"DeploymentService[{self.abb}, {self.dir}, {self.artifact_name}, {self.ext}, {self.version}]"
@@ -173,21 +180,29 @@ class NodeDeploymentService(DeploymentService):
     def _is_registered(self) -> bool:
         return glob.glob(f'cenm-notary/nodeInfo-*')
 
-    def _register_node(self):
+    def _register_node(self, artifact_name, config_file):
         self.logger.info('Registering node to the network')
-        artifact_name = f'{self.artifact_name}-{self.version}'
-        config_file = f'{self.dir.split("-")[-1]}.conf'
         exit_code = -1
         while exit_code != 0:
-            self.logger.debug(f'[Running] (cd {self.dir} && java -jar {artifact_name}.jar -f {config_file} --initial-registration --network-root-truststore ./certificates/network-root-truststore.jks --network-root-truststore-password trustpass) to start {artifact_name} service')
+            self.logger.debug(f'[Running] (cd {self.dir} && java -jar {artifact_name}.jar -f {config_file} --initial-registration --network-root-truststore ./certificates/network-root-truststore.jks --network-root-truststore-password trustpass) to start {self.artifact_name} service')
             exit_code = self.sysi.run_get_exit_code(f'(cd {self.dir} && java -jar {artifact_name}.jar -f {config_file} --initial-registration --network-root-truststore ./certificates/network-root-truststore.jks --network-root-truststore-password trustpass)')
         self.logger.info(f'Sleeping for 2 minutes to allow registration to complete and for network parameters to be signed')
         self.sysi.sleep(120)
 
     def deploy(self):
+        artifact_name = f'{self.artifact_name}-{self.version}'
+        config_file = f'{self.dir.split("-")[-1]}.conf'
+
         if not self._is_registered():
-            self._register_node()
-        super.deploy()
+            self._register_node(artifact_name, config_file)
+        while True:
+            try:
+                self.logger.debug(f'[Running] (cd {self.dir} && java -jar {artifact_name}.jar -f {config_file}) to start {self.artifact_name} service')
+                exit_code = self.sysi.run_get_exit_code(f'(cd {self.dir} && java -jar {artifact_name}.jar -f {config_file})')
+                if exit_code != 0:
+                    raise RuntimeError(f'{self.artifact_name} service stopped')
+            except:
+                self.logger.warning(f'{self.artifact_name} service stopped. Restarting...')
 
     def clean_runtime(self):
         for root, dirs, files in os.walk(self.dir):

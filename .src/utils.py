@@ -2,6 +2,24 @@ import logging
 import os
 from enum import Enum
 from typing import List, Dict
+import warnings
+import functools
+
+def deprecated(func):
+    """This is a decorator which can be used to mark functions
+    as deprecated. It will result in a warning being emitted
+    when the function is used.
+    
+    """
+    @functools.wraps(func)
+    def new_func(*args, **kwargs):
+        warnings.simplefilter('always', DeprecationWarning)  # turn off filter
+        warnings.warn("Call to deprecated function {}.".format(func.__name__),
+                      category=DeprecationWarning,
+                      stacklevel=2)
+        warnings.simplefilter('default', DeprecationWarning)  # reset filter
+        return func(*args, **kwargs)
+    return new_func
 
 class Constants(Enum):
     BASE_URL = 'https://software.r3.com/artifactory'
@@ -18,9 +36,19 @@ class Constants(Enum):
     DB_SERVICES = ['auth', 'idman', 'nmap', 'notary', 'node', 'zone']
 
     RUNTIME_FILES = {
-            'dirs': ["logs", "h2", "ssh", "shell-commands", "djvm", "artemis", "brokers", "additional-node-infos"],
-            'notary_files': ["process-id", "network-parameters", "nodekeystore.jks", "truststore.jks", "sslkeystore.jks", "certificate-request-id.txt"]
-        }
+        'dirs': ["logs", "h2", "ssh", "shell-commands", "djvm", "artemis", "brokers", "additional-node-infos"],
+        'notary_files': ["process-id", "network-parameters", "nodekeystore.jks", "truststore.jks", "sslkeystore.jks", "certificate-request-id.txt"]
+    }
+
+    IDMAN_DEPLOY_TIME = 10
+    SIGNER_DEPLOY_TIME = 10
+    NMAP_DEPLOY_TIME = 20
+    AUTH_DEPLOY_TIME = 15
+    GATEWAY_DEPLOY_TIME = 5
+    ZONE_DEPLOY_TIME = 10
+
+    NODE_DEPLOY_TIME = 60
+    
 
 class Logger:
     """Logger management
@@ -91,6 +119,7 @@ class Printer:
         self.nms_visual_version = nms_visual_version
         self.corda_version = corda_version
 
+    @deprecated
     def print_cenm_version(self):
         print("""
 Cenm local deployment manager
@@ -111,6 +140,7 @@ Current Corda version:   {}
             self.corda_version
         ))
 
+    @deprecated
     def print_deployment_complete(self):
         print("""
 Deployment complete
@@ -120,6 +150,7 @@ Deployment logs can be found under: .logs/default-deployment.log
 
         """)
 
+    @deprecated
     def print_end_of_script_report(self, download_errors, download_errors_db):
         print("""
 End of script report
@@ -200,13 +231,13 @@ class CenmTool:
         label_color: str
     ) -> str:
         self._login('network-maintainer', 'p4ssWord')
-        token = self._run(f'zone create-subzone --config-file={config_file} --network-map-address={network_map_address} --network-parameters={network_parameters} --label={label} --label-color={label_color}')
+        token = self._run(f'zone create-subzone --config-file={config_file} --network-map-address={network_map_address} --network-parameters={network_parameters} --label={label} --label-color="{label_color}" --zone-token')
         self._logout()
         return token
 
     def set_config(self, service: str, config_file: str) -> str:
         self._login('config-maintainer', 'p4ssWord')
-        token = self._run(f'{service} config set -f={config_file}')
+        token = self._run(f'{service} config set -f={config_file} --zone-token')
         self._logout()
         return token
 
@@ -219,7 +250,7 @@ class CenmTool:
         self._login('config-maintainer', 'p4ssWord')
         subzones = self._run('zone get-subzones')
         self._logout()
-        zones = self.sysi.run_get_stdout(f"echo {subzones} | grep id | rev | cut -d ' ' -f 1 | rev | sed -e 's/\,//' | xargs").split(' ')
+        zones = self.sysi.run_get_stdout(f"echo \"{subzones}\" | grep id | rev | cut -d ' ' -f 1 | rev | xargs").replace(',','').replace('\n','').split(' ')
         return zones
 
     def cenm_subzone_deployment_init(self) -> Dict[str, str]:
@@ -227,12 +258,10 @@ class CenmTool:
         tokens['nmap'] = self.create_zone(
             config_file='../../cenm-nmap/networkmap.conf',
             network_map_address='127.0.0.1:20000',
-            network_parameters='../../cenm-nmap/network-parameters.conf',
+            network_parameters='../../cenm-nmap/networkparameters.conf',
             label='Main',
             label_color='#941213'
         )
-        tokens['idman'] = self.set_config('identity-manager', '../../cenm-idman/identity-manager.conf')
-        # TODO: set admin address
-        # self.set_admin_address('identity-manager', '')
+        tokens['idman'] = self.set_config('identity-manager', '../../cenm-idman/identitymanager.conf')
         tokens['signer'] = self.set_config('signer', '../../cenm-signer/signer.conf')
         return tokens
