@@ -2,10 +2,21 @@ import os
 import sys
 if f'{os.getcwd()}/.src' not in sys.path:
     sys.path.append(f'{os.getcwd()}/.src')
+try:
+    from pyhocon import ConfigFactory
+except ImportError:
+    print("""
+Your python installation is missing the:
+    pyhocon
+
+package which is required for this script to run. Please install it using:
+    pip install pyhocon
+    """)
 import argparse
 import warnings
 from typing import Dict
 from managers.service_manager import ServiceManager
+from utils import SystemInteract
 
 parser = argparse.ArgumentParser(description='Download CENM artifacts from Artifactory')
 parser.add_argument(
@@ -112,10 +123,14 @@ def validate_arguments(args: argparse.Namespace):
         warnings.warn("--health-check-frequency is not needed without --run-default-deployment")
     if args.health_check_frequency < 10:
         raise ValueError("Smallest value for --health-check-frequency is 10 seconds")
+    if args.run_default_deployment:
+        if SystemInteract().run_get_exit_code("jq --help", silent=True) != 0:
+            raise RuntimeError("jq is not installed in your shell, please install it and try again")
 
 def main(args: argparse.Namespace):
 
     validate_arguments(args)
+    exit(0)
 
     service_manager = ServiceManager(
         username,

@@ -190,8 +190,11 @@ class SystemInteract:
     def run(self, cmd):
         os.system(cmd)
 
-    def run_get_exit_code(self, cmd) -> int:
-        return os.system(cmd)
+    def run_get_exit_code(self, cmd, silent: bool = False) -> int:
+        if silent:
+            return os.system(f'{cmd} > /dev/null 2>&1')
+        else:
+            return os.system(cmd)
 
     def run_get_stdout(self, cmd) -> str:
         os.system(f'{cmd} > .tmp')
