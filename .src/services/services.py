@@ -1,3 +1,4 @@
+from pyhocon import ConfigFactory
 from services.base_services import BaseService, DeploymentService, NodeDeploymentService
 from managers.certificate_manager import CertificateManager
 from utils import Constants
@@ -20,8 +21,8 @@ class AuthService(DeploymentService):
         artifact_name = f'{self.artifact_name}-{self.version}'
         while True:
             try:
-                self.logger.debug(f'[Running] (cd {self.dir} && java -jar {artifact_name}.jar -f auth.conf --initial-user-name admin --initial-user-password p4ssWord --keep-running --verbose) to start {self.artifact_name} service')
-                exit_code = self.sysi.run_get_exit_code(f'(cd {self.dir} && java -jar {artifact_name}.jar -f auth.conf --initial-user-name admin --initial-user-password p4ssWord --keep-running --verbose)')
+                self.logger.debug(f'[Running] (cd {self.dir} && java -jar {artifact_name}.jar -f {self.config_file} --initial-user-name admin --initial-user-password p4ssWord --keep-running --verbose) to start {self.artifact_name} service')
+                exit_code = self.sysi.run_get_exit_code(f'(cd {self.dir} && java -jar {artifact_name}.jar -f {self.config_file} --initial-user-name admin --initial-user-password p4ssWord --keep-running --verbose)')
                 if exit_code != 0:
                     raise RuntimeError(f'{self.artifact_name} service stopped')
             except:
@@ -67,8 +68,8 @@ class GatewayService(DeploymentService):
         artifact_name = f'{self.artifact_name}-{self.version}'
         while True:
             try:
-                self.logger.debug(f'[Running] (cd {self.dir}/private && java -jar {artifact_name}.jar -f gateway.conf) to start {self.artifact_name} service')
-                exit_code = self.sysi.run_get_exit_code(f'(cd {self.dir}/private && java -jar {artifact_name}.jar -f gateway.conf)')
+                self.logger.debug(f'[Running] (cd {self.dir}/private && java -jar {artifact_name}.jar -f {self.config_file}) to start {self.artifact_name} service')
+                exit_code = self.sysi.run_get_exit_code(f'(cd {self.dir}/private && java -jar {artifact_name}.jar -f {self.config_file})')
                 if exit_code != 0:
                     raise RuntimeError(f'{self.artifact_name} service stopped')
             except:
@@ -205,7 +206,7 @@ class CordaShellService(BaseService):
         self._handle_corda_shell()
         return self.error
 
-class PkiToolService(BaseService):
+class PkiToolService(DeploymentService):
 
     def _check_presence(self) -> bool:
         for _, _, files in os.walk(self.dir):
@@ -224,34 +225,17 @@ class PkiToolService(BaseService):
         self._move()
         return self.error
 
-    def generate(self):
+    def deploy(self):
         cert_manager = CertificateManager()
         exit_code = -1
         while exit_code != 0:
             exit_code = cert_manager.generate()
-
-    def clean_runtime(self):
-        for root, dirs, files in os.walk(self.dir):
-            for dir in dirs:
-                if dir in Constants.RUNTIME_FILES.value['dirs']:
-                    self.sysi.remove(os.path.join(root, dir))
-
-    def clean_artifacts(self):
-        for root, dirs, files in os.walk(self.dir):
-            for file in files:
-                if file.endswith('.jar'):
-                    self.sysi.remove(os.path.join(root, file))
-                elif file in ["cenm", "cenm.cmd"]:
-                    self.sysi.remove(os.path.join(root, file))
 
     def clean_certificates(self):
         for root, dirs, files in os.walk(self.dir):
             for dir in dirs:
                 if dir in ["crl-files", "trust-stores", "key-stores"]:
                     self.sysi.remove(os.path.join(root, dir))
-    
-    def clean_all(self):
-        self.sysi.remove(self.dir)
 
 class SignerService(DeploymentService):
     pass

@@ -60,7 +60,7 @@ class Logger:
     """
     def __init__(self):
         # self.name = name
-        self.formatter = logging.Formatter('[%(asctime)s,%(msecs)d %(levelname)s] %(name)s %(message)s')
+        self.formatter = logging.Formatter('[%(asctime)s, %(levelname)s] %(name)s %(message)s')
 
     def _set_logging_config(self, logger_name, log_file, level=logging.DEBUG):
         logger = logging.getLogger(logger_name)

@@ -1,4 +1,5 @@
 from services.services import *
+from managers.config_manager import ConfigManager
 from managers.database_manager import DatabaseManager
 from managers.download_manager import DownloadManager
 from managers.deployment_manager import DeploymentManager
@@ -39,11 +40,11 @@ class ServiceManager:
         nms_visual_version: str,
         corda_version: str
     ):
-        self.base_url = Constants.BASE_URL.value#'https://software.r3.com/artifactory'
-        self.ext_package = Constants.EXT_PACKAGE.value#'extensions-lib-release-local/com/r3/appeng'
-        self.enm_package = Constants.ENM_PACKAGE.value#'r3-enterprise-network-manager/com/r3/enm'
-        self.corda_package = Constants.CORDA_PACKAGE.value#'corda-releases/net/corda'
-        self.repos = Constants.REPOS.value#['auth', 'gateway', 'idman', 'nmap', 'notary', 'node', 'pki', 'signer', 'zone']
+        self.base_url = Constants.BASE_URL.value
+        self.ext_package = Constants.EXT_PACKAGE.value
+        self.enm_package = Constants.ENM_PACKAGE.value
+        self.corda_package = Constants.CORDA_PACKAGE.value
+        self.repos = Constants.REPOS.value
         self.db_services = Constants.DB_SERVICES.value
         self.sysi = SystemInteract()
         self.printer = Printer(
@@ -63,6 +64,7 @@ class ServiceManager:
             url=            f'{self.base_url}/{self.ext_package}/accounts',
             username=       username,
             password=       password,
+            config_file=    'auth.conf',
             deployment_time=Constants.AUTH_DEPLOY_TIME.value)
         self.CLIENT = AuthClientService(
             abb=            'client',
@@ -91,6 +93,7 @@ class ServiceManager:
             url=            f'{self.base_url}/{self.ext_package}/gateway',
             username=       username,
             password=       password,
+            config_file=    'gateway.conf',
             deployment_time=Constants.GATEWAY_DEPLOY_TIME.value)
         self.GATEWAY_PLUGIN = GatewayPluginService(
             abb=            'gateway-plugin',
@@ -119,6 +122,7 @@ class ServiceManager:
             url=            f'{self.base_url}/{self.enm_package}/services',
             username=       username,
             password=       password,
+            config_file=    'identitymanager.conf',
             deployment_time=Constants.IDMAN_DEPLOY_TIME.value)
         self.CRR_TOOL = CrrToolService(
             abb=            'crr-tool',
@@ -138,6 +142,7 @@ class ServiceManager:
             url=            f'{self.base_url}/{self.enm_package}/services',
             username=       username,
             password=       password,
+            config_file=    'networkmap.conf',
             deployment_time=Constants.NMAP_DEPLOY_TIME.value)
         self.NOTARY = NotaryService(
             abb=            'notary',
@@ -148,6 +153,7 @@ class ServiceManager:
             url=            f'{self.base_url}/{self.corda_package}',
             username=       username,
             password=       password,
+            config_file=    'notary.conf',
             deployment_time=Constants.NODE_DEPLOY_TIME.value)
         self.NODE = NodeService(
             abb=            'node',
@@ -158,6 +164,7 @@ class ServiceManager:
             url=            f'{self.base_url}/{self.corda_package}',
             username=       username,
             password=       password,
+            config_file=    'node.conf',
             deployment_time=Constants.NODE_DEPLOY_TIME.value)
         self.CORDA_SHELL = CordaShellService(
             abb=            'shell',
@@ -176,7 +183,9 @@ class ServiceManager:
             ext=            'zip',
             url=            f'{self.base_url}/{self.enm_package}/tools',
             username=       username,
-            password=       password)
+            password=       password,
+            config_file=    'pki.conf',
+            deployment_time=None)
         self.SIGNER = SignerService(
             abb=            'signer',
             dir=            'signer',
@@ -186,6 +195,7 @@ class ServiceManager:
             url=            f'{self.base_url}/{self.enm_package}/services',
             username=       username,
             password=       password,
+            config_file=    'signer.conf',
             deployment_time=Constants.SIGNER_DEPLOY_TIME.value)
         self.ZONE = ZoneService(
             abb=            'zone',
@@ -196,9 +206,11 @@ class ServiceManager:
             url=            f'{self.base_url}/{self.enm_package}/services',
             username=       username,
             password=       password,
+            config_file=    '',
             deployment_time=Constants.ZONE_DEPLOY_TIME.value)
 
         self.db_manager = DatabaseManager(self.get_database_services(), DownloadManager(username, password))
+        self.config_manager = ConfigManager()
         self.deployment_manager = DeploymentManager(self.get_deployment_services())
 
     def _get_all_services(self) -> List[BaseService]:
@@ -267,10 +279,12 @@ class ServiceManager:
         self.printer.print_end_of_script_report(download_errors, download_errors_db)
 
     def deploy_all(self, health_check_frequency: int):
+        self.config_manager.validate_services(self.get_deployment_services())
         self.deployment_manager.deploy_services(health_check_frequency)
 
     def generate_certificates(self):
-        self.PKI.generate()
+        self.config_manager.validate_services([*self.get_deployment_services(), self.NODE, self.PKI])
+        self.PKI.deploy()
 
     def clean_all(self,
         clean_deep: bool,
@@ -279,7 +293,7 @@ class ServiceManager:
         clean_runtime: bool
     ):
         self.sysi.remove(".logs/*", silent=True)
-        for service in [*self.get_deployment_services(), self.PKI]:
+        for service in [*self.get_deployment_services(), self.NODE, self.PKI]:
             if clean_deep:
                 service.clean_all()
                 continue
@@ -289,5 +303,15 @@ class ServiceManager:
                 service.clean_certificates()
             if clean_runtime:
                 service.clean_runtime()
+
+    def clean_specific_artifacts(self, services: List[str]):
+        print("Cleaning individual artifacts does not work with any other arguments, script will exit after downloading.")
+        for service in services:
+            try:
+                service = self.get_service(service)
+                service.clean_runtime()
+                service.clean_artifacts()
+            except ValueError as e:
+                print(e)
 
         

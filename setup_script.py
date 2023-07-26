@@ -67,6 +67,11 @@ parser.add_argument(
     type=str,
     help='Download individual artifacts, use a comma separated string of artifacts to download e.g. "pki-tool,identitymanager" to download the pki-tool and identitymanager artifacts'
 )
+parser.add_argument(
+    '--clean-individual-artifacts',
+    type=str,
+    help='Clean individual artifacts, use a comma separated string of artifacts to download e.g. "pki-tool,identitymanager" to clean the pki-tool and identitymanager artifacts'
+)
 
 # Check if .env file exists
 if not os.path.exists(".env"):
@@ -94,9 +99,15 @@ def validate_arguments(args: argparse.Namespace):
     if sum(clean_args) > 1:
         raise ValueError("Cannot use more than one of the following flags: --clean, --deep-clean, --clean-artifacts, --clean-certs")
     # Check if no other arguments are used with --download-individual
-    all_args = [args.setup_dir_structure, args.generate_certs, args.clean, args.clean_certs, args.clean_artifacts, args.deep_clean, args.run_default_deployment, args.version, args.download_individual, args.health_check_frequency]
+    all_args = [args.setup_dir_structure, args.generate_certs, args.clean, args.clean_certs, args.clean_artifacts, args.deep_clean, args.run_default_deployment, args.version, (args.health_check_frequency != 30), (not args.download_individual), (not args.clean_individual_artifacts)]
     if args.download_individual and sum(all_args) > 1:
         raise ValueError("Cannot use --download-individual with any other flag")
+    if args.download_individual == "":
+        raise ValueError("Cannot use --download-individual without specifying artifacts to download")
+    if args.clean_individual_artifacts and sum(all_args) > 1:
+        raise ValueError("Cannot use --clean-individual-artifacts with any other flag")
+    if args.clean_individual_artifacts == "":
+        raise ValueError("Cannot use --clean-individual-artifacts without specifying artifacts to clean")
     if args.health_check_frequency != 30 and not args.run_default_deployment:
         warnings.warn("--health-check-frequency is not needed without --run-default-deployment")
     if args.health_check_frequency < 10:
@@ -105,7 +116,7 @@ def validate_arguments(args: argparse.Namespace):
 def main(args: argparse.Namespace):
 
     validate_arguments(args)
-    
+
     service_manager = ServiceManager(
         username,
         password,
@@ -119,6 +130,10 @@ def main(args: argparse.Namespace):
     if args.download_individual:
         services = [arg.strip() for arg in args.download_individual.split(',')]
         service_manager.download_specific(services)
+
+    if args.clean_individual_artifacts:
+        services = [arg.strip() for arg in args.clean_individual_artifacts.split(',')]
+        service_manager.clean_specific_artifacts(services)
 
     service_manager.clean_all(
         args.deep_clean,
