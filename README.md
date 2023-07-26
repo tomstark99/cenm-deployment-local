@@ -38,11 +38,27 @@ NMS_VISUAL_VERSION=<nms_visual_version>
 NOTARY_VERSION=<corda_version>
 ```
 
-Once you have saved this file, you can run the python script with the following options
+The `pyhocon` package is required for this script to work, install using
+
+```shell
+pip3 install pyhocon
+```
+
+Once you have saved this file, you can run the Python script with the following options.
 
 ```
 $ python3 setup_script.py -h
-usage: setup_script.py [-h] [--setup-dir-structure] [--generate-certs] [--clean] [--clean-artifacts] [--deep-clean]
+usage: setup_script.py [-h]
+                       [--setup-dir-structure]
+                       [--generate-certs]
+                       [--clean] [--clean-certs]
+                       [--clean-artifacts]
+                       [--deep-clean]
+                       [--run-default-deployment]
+                       [--version]
+                       [--health-check-frequency HEALTH_CHECK_FREQUENCY]
+                       [--download-individual DOWNLOAD_INDIVIDUAL]
+                       [--clean-individual-artifacts CLEAN_INDIVIDUAL_ARTIFACTS]
 
 Download CENM artifacts from Artifactory
 
@@ -58,6 +74,14 @@ options:
   --run-default-deployment
                         Runs a default deployment, following the steps from README
   --version             Show current cenm version
+  --health-check-frequency HEALTH_CHECK_FREQUENCY
+                        Time to wait between each health check, default is 30 seconds
+  --download-individual DOWNLOAD_INDIVIDUAL
+                        Download individual artifacts, use a comma separated string of artifacts to download e.g.
+                        "pki-tool,identitymanager" to download the pki-tool and identitymanager artifacts
+  --clean-individual-artifacts CLEAN_INDIVIDUAL_ARTIFACTS
+                        Clean individual artifacts, use a comma separated string of artifacts to download e.g.
+                        "pki-tool,identitymanager" to clean the pki-tool and identitymanager artifacts
 ```
 
 The following command will download all the config files in the correct directories as well as download all the artifacts with the versions specified in `.env`:
