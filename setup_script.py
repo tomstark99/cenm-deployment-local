@@ -2,16 +2,6 @@ import os
 import sys
 if f'{os.getcwd()}/.src' not in sys.path:
     sys.path.append(f'{os.getcwd()}/.src')
-try:
-    from pyhocon import ConfigFactory
-except ImportError:
-    print("""
-Your python installation is missing the:
-    pyhocon
-
-package which is required for this script to run. Please install it using:
-    pip install pyhocon
-    """)
 import argparse
 import warnings
 from typing import Dict
@@ -126,11 +116,21 @@ def validate_arguments(args: argparse.Namespace):
     if args.run_default_deployment:
         if SystemInteract().run_get_exit_code("jq --help", silent=True) != 0:
             raise RuntimeError("jq is not installed in your shell, please install it and try again")
+    if args.run_default_deployment:
+        try:
+            from pyhocon import ConfigFactory
+        except ImportError:
+            raise ImportError("""
+
+Your python installation is missing the:
+    pyhocon
+
+package which is required for this script to run. Please install it using:
+    pip install pyhocon""")
 
 def main(args: argparse.Namespace):
 
     validate_arguments(args)
-    exit(0)
 
     service_manager = ServiceManager(
         username,
