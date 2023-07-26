@@ -52,11 +52,27 @@ NMS_VISUAL_VERSION=<nms_visual_version>
 NOTARY_VERSION=<corda_version>
 ```
 
-Once you have saved this file, you can run the python script with the following options
+The `pyhocon` package is required for this script to work, install using
+
+```shell
+pip3 install pyhocon
+```
+
+Once you have saved this file, you can run the Python script with the following options.
 
 ```
 $ python3 setup_script.py -h
-usage: setup_script.py [-h] [--setup-dir-structure] [--generate-certs] [--clean] [--clean-artifacts] [--deep-clean]
+usage: setup_script.py [-h]
+                       [--setup-dir-structure]
+                       [--generate-certs]
+                       [--clean] [--clean-certs]
+                       [--clean-artifacts]
+                       [--deep-clean]
+                       [--run-default-deployment]
+                       [--version]
+                       [--health-check-frequency HEALTH_CHECK_FREQUENCY]
+                       [--download-individual DOWNLOAD_INDIVIDUAL]
+                       [--clean-individual-artifacts CLEAN_INDIVIDUAL_ARTIFACTS]
 
 Download CENM artifacts from Artifactory
 
@@ -66,8 +82,20 @@ options:
                         Create directory structure for CENM deployment and download all current artifacts
   --generate-certs      Generate certificates and distribute them to services
   --clean               Remove all generated run-time files
+  --clean-certs         Remove all generated certificates
   --clean-artifacts     Remove all downloaded artifacts and generated certificates
   --deep-clean          Remove all generated service folders
+  --run-default-deployment
+                        Runs a default deployment, following the steps from README
+  --version             Show current cenm version
+  --health-check-frequency HEALTH_CHECK_FREQUENCY
+                        Time to wait between each health check, default is 30 seconds
+  --download-individual DOWNLOAD_INDIVIDUAL
+                        Download individual artifacts, use a comma separated string of artifacts to download e.g.
+                        "pki-tool,identitymanager" to download the pki-tool and identitymanager artifacts
+  --clean-individual-artifacts CLEAN_INDIVIDUAL_ARTIFACTS
+                        Clean individual artifacts, use a comma separated string of artifacts to download e.g.
+                        "pki-tool,identitymanager" to clean the pki-tool and identitymanager artifacts
 ```
 
 The following command will download all the config files in the correct directories as well as download all the artifacts with the versions specified in `.env`:
@@ -195,7 +223,7 @@ CENM services should be deployed in a particular order, this being:
         --auth-port=8081 \
         --auth-trust-store-location certificates/corda-ssl-trust-store.jks \
         --auth-trust-store-password trustpass \
-        --auth-issuer test \
+        --auth-issuer "http://test" \
         --auth-leeway 5 \
         --tls=true \
         --tls-keystore=certificates/corda-ssl-identity-manager-keys.jks \
@@ -203,13 +231,70 @@ CENM services should be deployed in a particular order, this being:
         --tls-truststore=certificates/corda-ssl-trust-store.jks \
         --tls-truststore-password=trustpass
     ```
+
+12. Verify your gateway is up by navigating to http://localhost:8089
+
+13. Create a 'Main' subzone
+
+    Navigate to the cenm-tool directory
+
+    ```shell
+    cd cenm-gateway/cenm-tool
+    ```
+
+    For creating a subzone, you need the `network-maintainer` login
+
+    ```shell
+    ./cenm context login -s http://127.0.0.1:8089 -u network-maintainer -p <password>
+    ./cenm zone create-subzone \
+        --config-file=../../cenm-nmap/networkmap.conf \
+        --network-map-address=127.0.0.1:20000 \
+        --network-parameters=../../cenm-nmap/networkparameters.conf \
+        --label=Main \
+        --label-color='#941213' \
+        --zone-token
+    ```
+
+    Make a note of the zone token that is returned in case you need it later (for example if you are using the angel service)
+
+14. Set your zone config
+
+    Set the 'Main' zone config to be the same as the global zone, for this you will need the `config-maintainer` login
+
+    ```shell
+    ./cenm context login -s http://127.0.0.1:8089 -u config-maintainer -p <password>
+    ./cenm identity-manager config set \
+        --config-file=../../cenm-idman/identitymanager.conf \
+        --zone-token
+    ./cenm signer config set \
+        --config-file=../../cenm-signer/signer.conf \
+        --zone-token
+    ```
+
+    Again, make a note of the zone token that is returned in case you need it later (for example if you are using the angel service)
     
-12. Run the `setupAuth.sh` script to add users to the auth service
+15. Run the `setupAuth.sh` script to add users to the auth service
     
+    To grant your users access to the new subzone, replace the `<SUBZONE_ID>` with the id returned from
+
+    ```shell
+    ./cenm context login -s http://127.0.0.1:8089 -u config-maintainer -p <password>
+    ./cenm zone get-subzones
+    ```
+
+    The user roles are located in the cenm-auth directory, in the example below the zone id is `1` which should be substituted `"s//<here>/g"` in the `perl` command
+
+    ```shell
+    cd cenm-auth/setup-auth/roles
+    for file in *.json; do perl -i -pe "s/<SUBZONE_ID>/1/g" $file; done
+    ```
+
+    After this run:
+
     ```shell
     setupAuth.sh
     ```
 
     _Note: this script requires [jq](https://stedolan.github.io/jq/download/), a command line JSON processor that can be installed easily in various ways._
     
-13. Verify your gateway is up by navigating to http://localhost:8089
+
