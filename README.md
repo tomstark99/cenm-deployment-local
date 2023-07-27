@@ -12,6 +12,20 @@ if you want to skip having to clone the repo manually and running the script you
 
 You then skip to the [Deployment Order](#deployment-order) section
 
+## One line auto-deployment
+
+If you just need a default deployment of CENM then you can also skip having to run the manual commands in the [Deployment Order](#deployment-order) section. You can also run this command after making any config adjustments and adding plugins that need testing for example.
+
+```shell
+python3 setup_script.py --clean --run-default-deployment
+```
+
+This runs all the commands from the [Deployment Order](#deployment-order) section in python subprocesses, the python program won't exit until you shut down the CENM deployment with a `Ctrl+C`.
+
+A health check runs on the subprocesses every 30 seconds and will restart services if they become unhealthy.
+
+If you already have a CENM deployment you can omit the `--clean` flag and the deployment will run without running the initial registration steps.
+
 ## Getting started
 
 Clone this repo locally:
@@ -38,11 +52,27 @@ NMS_VISUAL_VERSION=<nms_visual_version>
 NOTARY_VERSION=<corda_version>
 ```
 
-Once you have saved this file, you can run the python script with the following options
+The `pyhocon` package is required for this script to work, install using
+
+```shell
+pip3 install pyhocon
+```
+
+Once you have saved this file, you can run the Python script with the following options.
 
 ```
 $ python3 setup_script.py -h
-usage: setup_script.py [-h] [--setup-dir-structure] [--generate-certs] [--clean] [--clean-artifacts] [--deep-clean]
+usage: setup_script.py [-h]
+                       [--setup-dir-structure]
+                       [--generate-certs]
+                       [--clean] [--clean-certs]
+                       [--clean-artifacts]
+                       [--deep-clean]
+                       [--run-default-deployment]
+                       [--version]
+                       [--health-check-frequency HEALTH_CHECK_FREQUENCY]
+                       [--download-individual DOWNLOAD_INDIVIDUAL]
+                       [--clean-individual-artifacts CLEAN_INDIVIDUAL_ARTIFACTS]
 
 Download CENM artifacts from Artifactory
 
@@ -52,8 +82,20 @@ options:
                         Create directory structure for CENM deployment and download all current artifacts
   --generate-certs      Generate certificates and distribute them to services
   --clean               Remove all generated run-time files
+  --clean-certs         Remove all generated certificates
   --clean-artifacts     Remove all downloaded artifacts and generated certificates
   --deep-clean          Remove all generated service folders
+  --run-default-deployment
+                        Runs a default deployment, following the steps from README
+  --version             Show current cenm version
+  --health-check-frequency HEALTH_CHECK_FREQUENCY
+                        Time to wait between each health check, default is 30 seconds
+  --download-individual DOWNLOAD_INDIVIDUAL
+                        Download individual artifacts, use a comma separated string of artifacts to download e.g.
+                        "pki-tool,identitymanager" to download the pki-tool and identitymanager artifacts
+  --clean-individual-artifacts CLEAN_INDIVIDUAL_ARTIFACTS
+                        Clean individual artifacts, use a comma separated string of artifacts to download e.g.
+                        "pki-tool,identitymanager" to clean the pki-tool and identitymanager artifacts
 ```
 
 The following command will download all the config files in the correct directories as well as download all the artifacts with the versions specified in `.env`:
