@@ -5,6 +5,7 @@ from utils import Constants
 from time import sleep
 import glob
 import os
+import re
 import threading
 
 
@@ -230,6 +231,26 @@ class PkiToolService(DeploymentService):
         exit_code = -1
         while exit_code != 0:
             exit_code = cert_manager.generate()
+
+    def validate(self) -> str:
+        try:
+            config = ConfigFactory.parse_file(f'{self.dir}/{self.config_file}')
+            return ""
+        except Exception as e:
+            """this HOCON parser doesn't like default pki config e.g.
+                 "::CORDA_SSL_NETWORK_MAP"
+            
+            This workaround finds the line number of the HOCON error and checks if the config option
+            on that line matches the above pattern, if so then it bypasses the parsing error.
+
+            """
+            line_number = int(re.search(r'line\:\d+',str(e)).group().split(':')[-1])
+            with open(f'{self.dir}/{self.config_file}', 'r') as f:
+                pki_config_lines = f.readlines()
+            if re.match(r'.*\"\:\:\w+\"\,\n', pki_config_lines[line_number]):
+                return ""
+            else:
+                return str(e)
 
     def clean_certificates(self):
         for root, dirs, files in os.walk(self.dir):
