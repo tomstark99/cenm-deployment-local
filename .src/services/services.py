@@ -76,6 +76,14 @@ class GatewayService(DeploymentService):
             except:
                 self.logger.warning(f'{self.artifact_name} service stopped. Restarting...')
 
+    def validate(self) -> str:
+        try:
+            ConfigFactory.parse_file(f'{self.dir}/private/{self.config_file}')
+            ConfigFactory.parse_file(f'{self.dir}/public/{self.config_file}')
+            return ""
+        except Exception as e:
+            return str(e)
+
 class GatewayPluginService(BaseService):
 
     def _handle_plugin(self):
@@ -234,7 +242,7 @@ class PkiToolService(DeploymentService):
 
     def validate(self) -> str:
         try:
-            config = ConfigFactory.parse_file(f'{self.dir}/{self.config_file}')
+            ConfigFactory.parse_file(f'{self.dir}/{self.config_file}')
             return ""
         except Exception as e:
             """this HOCON parser doesn't like default pki config e.g.
@@ -272,3 +280,6 @@ class ZoneService(DeploymentService):
                     raise RuntimeError(f'{self.artifact_name} service stopped')
             except:
                 self.logger.warning(f'{self.artifact_name} service stopped. Restarting...')
+    
+    def validate(self) -> str:
+        return ""

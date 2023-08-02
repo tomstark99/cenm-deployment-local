@@ -151,7 +151,7 @@ class DeploymentService(BaseService):
 
     def validate(self) -> str:
         try:
-            config = ConfigFactory.parse_file(f'{self.dir}/{self.config_file}')
+            ConfigFactory.parse_file(f'{self.dir}/{self.config_file}')
             return ""
         except Exception as e:
             return str(e)
