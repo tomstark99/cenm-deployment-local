@@ -252,10 +252,10 @@ class PkiToolService(DeploymentService):
             on that line matches the above pattern, if so then it bypasses the parsing error.
 
             """
-            line_number = int(re.search(r'line\:\d+',str(e)).group().split(':')[-1])
+            line_number = (int(re.search(r'line\:\d+',str(e)).group().split(':')[-1]) - 1)
             with open(f'{self.dir}/{self.config_file}', 'r') as f:
                 pki_config_lines = f.readlines()
-            if re.match(r'.*\"\:\:\w+\"\,\n', pki_config_lines[line_number]):
+            if re.match(r'.*\"\:\:\w+\"(\,)?\n.*', ''.join(pki_config_lines[line_number-1:line_number+1])):
                 return ""
             else:
                 return str(e)

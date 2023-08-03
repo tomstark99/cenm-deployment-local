@@ -52,6 +52,8 @@ class CertificateManager:
     def _signer(self):
         # trust stores
         self._copy('trust-stores/corda-ssl-trust-store.jks', 'cenm-signer/certificates')
+        # This is not needed for local keys however might be useful if using HSM
+        self._copy('trust-stores/network-root-truststore.jks', 'cenm-signer/certificates')
         # key stores
         self._copy('key-stores/corda-network-map-keys.jks', 'cenm-signer/certificates')
         self._copy('key-stores/corda-identity-manager-keys.jks', 'cenm-signer/certificates')

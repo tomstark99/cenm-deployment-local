@@ -68,7 +68,6 @@ class DeploymentManager:
         """
         try:
             self.logger.info("Starting the cenm deployment")
-            self.logger.info(type(self.functions))
             self.logger.info(self.functions)
             for service, function in self.functions.items():
                 service_object = self.deployment_services[service]
