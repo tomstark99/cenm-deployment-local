@@ -4,6 +4,7 @@ from enum import Enum
 from typing import List, Dict
 import warnings
 import functools
+import uuid
 
 def deprecated(func):
     """This is a decorator which can be used to mark functions
@@ -26,7 +27,7 @@ class Constants(Enum):
     GITHUB_URL = 'https://github.com/tomstark99'
     EXT_PACKAGE = 'extensions-lib-release-local/com/r3/appeng'
     ENM_PACKAGE = 'r3-enterprise-network-manager/com/r3/enm'
-    CORDA_PACKAGE = 'corda-releases/net/corda'
+    CORDA_PACKAGE = 'r3-corda-releases/com/r3/corda'
 
     MSSQL_DRIVER = 'https://repo1.maven.org/maven2/com/microsoft/sqlserver/mssql-jdbc/8.2.2.jre8/mssql-jdbc-8.2.2.jre8.jar'
     POSTGRES_DRIVER = 'https://repo1.maven.org/maven2/org/postgresql/postgresql/42.5.2/postgresql-42.5.2.jar'
@@ -171,6 +172,20 @@ End of script report
         else:
             print("All database drivers downloaded successfully.")
 
+    @deprecated
+    def print_end_of_check_report(self, check_errors):
+        print("""
+End of validation report
+=====================================
+        """)
+        if any(check_errors.values()):
+            print("The following errors were encountered when validating artifacts:")
+            for artifact_name, error in check_errors.items():
+                if error:
+                    print(f'Failed to validate {artifact_name}, artifact not found.')
+        else:
+            print("All artifacts validated successfully.")
+
 class SystemInteract:
     """Class for using system commands
 
@@ -197,10 +212,14 @@ class SystemInteract:
             return os.system(cmd)
 
     def run_get_stdout(self, cmd) -> str:
-        os.system(f'{cmd} > .tmp')
-        with open('.tmp', 'r') as f:
-            out = f.read()
-        os.system('rm .tmp')
+        unique_file = f'.tmp-{uuid.uuid4().hex}'
+        os.system(f'{cmd} > {unique_file}')
+        try:
+            with open(unique_file, 'r') as f:
+                out = f.read()
+            self.remove(unique_file, silent=True)
+        except:
+            out = 'E: Could not read stdout'
         return out
 
 class CenmTool:

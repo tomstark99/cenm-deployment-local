@@ -134,9 +134,9 @@ class IdentityManagerService(DeploymentService):
 class CrrToolService(BaseService):
 
     def _check_presence(self) -> bool:
-        for _, _, files in os.walk(self.dir):
+        for _, _, files in os.walk(f'{self.dir}/tools/{self.artifact_name}'):
             if 'crrsubmissiontool.jar' in files:
-                print(f'crrsubmissiontool.jar already exists. Skipping download.')
+                print(f'crrsubmissiontool.jar already exists. Skipping.')
                 return True
         return False
 
@@ -220,7 +220,7 @@ class PkiToolService(DeploymentService):
     def _check_presence(self) -> bool:
         for _, _, files in os.walk(self.dir):
             if 'pkitool.jar' in files:
-                print(f'pkitool.jar already exists. Skipping download.')
+                print(f'pkitool.jar already exists. Skipping.')
                 return True
         return False
 

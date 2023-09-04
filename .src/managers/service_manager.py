@@ -265,6 +265,12 @@ class ServiceManager:
         download_errors_db = self.db_manager.download()
         self.printer.print_end_of_script_report(download_errors, download_errors_db)
 
+    def check_all(self):
+        check_errors = {}
+        for service in self._get_all_services():
+            check_errors[service.artifact_name] = (not service._check_presence())
+        self.printer.print_end_of_check_report(check_errors)
+
     def download_specific(self, services: List[str]):
         print("Downloading individual artifacts does not work with any other arguments, script will exit after downloading.")
         download_errors = {}

@@ -80,7 +80,7 @@ class CertificateManager:
 
     def generate(self) -> int:
         certs = {}
-        exits = []
+        exits = [0]
         for path in ['crl-files', 'key-stores', 'trust-stores']:
             if self.sysi.path_exists(f'cenm-pki/{path}'):
                 print(f'{path} already exists. Skipping generation.')
@@ -97,5 +97,4 @@ class CertificateManager:
             print('Generating certificates')
             exits.append(self.sysi.run_get_exit_code(f'(cd cenm-pki && java -jar pkitool.jar -f pki.conf)'))
         self._distribute_certs()
-
         return max(exits)

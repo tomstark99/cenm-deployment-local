@@ -71,7 +71,7 @@ class BaseService(ABC):
     def _check_presence(self) -> bool:
         for _, _, files in os.walk(self.dir):
             if f'{self.artifact_name}.jar' in files or f'{self.artifact_name}-{self.version}.jar' in files:
-                print(f'{self.artifact_name} already exists. Skipping download.')
+                print(f'{self.artifact_name} already exists. Skipping.')
                 return True
         return False
     

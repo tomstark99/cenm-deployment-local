@@ -23,7 +23,7 @@ class DeploymentManager:
         self.sysi = SystemInteract()
     
     def _run_subzone_setup(self) -> bool:
-        return all([service in self.deployment_services.keys() for service in ["auth", "gateway", "zone"]])
+        return all(service in self.deployment_services.keys() for service in ["accounts-application", "gateway-service", "zone"])
 
     def _get_version_dict(self) -> Dict[str, str]:
         with open(".env", 'r') as f:
@@ -39,6 +39,10 @@ class DeploymentManager:
 
         cenm_tool = CenmTool(self.versions['NMS_VISUAL_VERSION'])
 
+        while not self._node_info():
+            self.logger.info("Waiting for nodeInfo files to be created")
+            sleep(5)
+        self.logger.info("Waiting for network parameters to be signed")
         tokens = cenm_tool.cenm_subzone_deployment_init()
         self.logger.info(f"Subzone tokens: {tokens}")
 
@@ -59,7 +63,7 @@ class DeploymentManager:
             java_processes = _get_processes()
             while int(java_processes) > 0:
                 self.logger.info(f'Waiting for {java_processes} processes to terminate')
-                sleep(10)
+                sleep(5)
                 java_processes = _get_processes()
 
     def deploy_services(self, health_check_frequency: int):
@@ -68,7 +72,8 @@ class DeploymentManager:
         """
         try:
             self.logger.info("Starting the cenm deployment")
-            self.logger.info(self.functions)
+            service_deployments = '\n'.join([f'{service}: {service_info}' for service, service_info in self.functions.items()])
+            self.logger.info(f'Deploying:\n\n{service_deployments}\n')
             for service, function in self.functions.items():
                 service_object = self.deployment_services[service]
                 self.logger.info(f'attempting to deploy {service}')
