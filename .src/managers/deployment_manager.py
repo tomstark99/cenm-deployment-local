@@ -18,12 +18,13 @@ class DeploymentManager:
         self.deployment_services = {s.artifact_name: s for s in services}
         self.functions = {s.artifact_name: s.deploy for s in services}
         self.processes = []
+        self.run_subzone_setup = self._run_subzone_setup()
         self.versions = self._get_version_dict()
         self.logger = Logger().get_logger(__name__)
         self.sysi = SystemInteract()
     
     def _run_subzone_setup(self) -> bool:
-        return all(service in self.deployment_services.keys() for service in ["accounts-application", "gateway-service", "zone"])
+        return all(service in self.deployment_services.keys() for service in ["accounts-application", "gateway-service", "zone"]) and (not self._node_info())
 
     def _get_version_dict(self) -> Dict[str, str]:
         with open(".env", 'r') as f:
@@ -83,7 +84,7 @@ class DeploymentManager:
                 self.logger.info(f'deployed {service} waiting {service_object.deployment_time} seconds until next service')
                 sleep(service_object.deployment_time)
 
-            if not self._node_info() and self._run_subzone_setup():
+            if self.run_subzone_setup:
                 self.logger.info('All services deployed, setting up subzones')
                 self._setup_auth()
                 self.logger.info('Subzones setup, starting health check')
