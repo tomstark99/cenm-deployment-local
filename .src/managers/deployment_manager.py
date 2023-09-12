@@ -18,7 +18,6 @@ class DeploymentManager:
         self.deployment_services = {s.artifact_name: s for s in services}
         self.functions = {s.artifact_name: s.deploy for s in services}
         self.processes = []
-        self.run_subzone_setup = self._run_subzone_setup()
         self.versions = self._get_version_dict()
         self.logger = Logger().get_logger(__name__)
         self.sysi = SystemInteract()
@@ -54,6 +53,9 @@ class DeploymentManager:
             self.sysi.run(f'(cd cenm-auth/setup-auth/roles && for file in *.json; do perl -i -pe "s/<SUBZONE_ID>/{zones[0]}/g" $file; done)')
             self.logger.info("Running setupAuth.sh with updated zone permissions")
             self.sysi.run("(cd cenm-auth/setup-auth && bash setupAuth.sh)")
+            self.logger.info("Setting subzone config")
+            token = cenm_tool.cenm_set_subzone_config(zones[0])
+            self.logger.info(f"Subzone network map token: {token}")
 
     def _wait_for_service_termination(self):
             def _get_processes() -> int:
@@ -72,6 +74,7 @@ class DeploymentManager:
         
         """
         try:
+            self.run_subzone_setup = self._run_subzone_setup()
             self.logger.info("Starting the cenm deployment")
             service_deployments = '\n'.join([f'{service}: {service_info}' for service, service_info in self.functions.items()])
             self.logger.info(f'Deploying:\n\n{service_deployments}\n')

@@ -1,4 +1,5 @@
 import os
+from utils import deprecated
 
 class DownloadManager:
     """Download manager for interacting with wget or curl.
@@ -19,14 +20,17 @@ class DownloadManager:
         self.password = password
         self.wget = self._is_wget_installed()
 
+    @deprecated
     def _is_wget_installed(self) -> bool:
         """Checks if wget is installed on host machine.
 
         Returns:
             True installed False if not.
 
-        """
+        Deprecating use of wget in favor of curl.
         return os.system('wget --version > /dev/null 2>&1') == 0
+        """
+        return False
 
     def download(self, url: str) -> bool:
         """Download a file from a given url using wget or curl.

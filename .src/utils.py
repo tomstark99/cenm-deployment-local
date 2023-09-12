@@ -237,6 +237,7 @@ class CenmTool:
         self.sysi = SystemInteract()
 
     def _run(self, cmd: str):
+        print(f'Running: {cmd}')
         return self.sysi.run_get_stdout(f'(cd {self.path} && java -jar {self.jar} {cmd})')
 
     def _login(self, username: str, password: str):
@@ -257,15 +258,22 @@ class CenmTool:
         self._logout()
         return token
 
-    def set_config(self, service: str, config_file: str) -> str:
+    def set_config(self, service: str, config_file: str, subzone: str = None) -> str:
         self._login('config-maintainer', 'p4ssWord')
-        token = self._run(f'{service} config set -f={config_file} --zone-token')
+        if subzone:
+            token = self._run(f'{service} config set -s {subzone} -f={config_file} --zone-token')
+        else:
+            token = self._run(f'{service} config set -f={config_file} --zone-token')
         self._logout()
         return token
 
-    def set_admin_address(self, service: str, address: str):
+    def set_admin_address(self, service: str, address: str, subzone: str = None):
         self._login('config-maintainer', 'p4ssWord')
-        self._run(f'{service} config set-admin-address -a={address}')
+        # You can only specify sub_zone for netmap
+        if subzone and service == "netmap":
+            self._run(f'{service} config set-admin-address -s {subzone} -a={address}')
+        else:
+            self._run(f'{service} config set-admin-address -a={address}')
         self._logout()
 
     def get_subzones(self) -> List[str]:
@@ -277,13 +285,21 @@ class CenmTool:
 
     def cenm_subzone_deployment_init(self) -> Dict[str, str]:
         tokens = {}
+
+        self.set_admin_address('identity-manager', 'localhost:5053')
+        tokens['idman'] = self.set_config('identity-manager', '../../cenm-idman/identitymanager.conf')
+        
+        self.set_admin_address('netmap', 'localhost:5055')
         tokens['nmap'] = self.create_zone(
             config_file='../../cenm-nmap/networkmap.conf',
-            network_map_address='127.0.0.1:20000',
+            network_map_address='localhost:20000',
             network_parameters='../../cenm-nmap/networkparameters.conf',
             label='Main',
             label_color='#941213'
         )
-        tokens['idman'] = self.set_config('identity-manager', '../../cenm-idman/identitymanager.conf')
+        self.set_admin_address('signer', 'localhost:5054')
         tokens['signer'] = self.set_config('signer', '../../cenm-signer/signer.conf')
-        return tokens
+
+    def cenm_set_subzone_config(self, subzone: str) -> str:
+        # self.set_admin_address('netmap', 'localhost:5055', subzone=subzone)
+        return self.set_config('netmap', '../../cenm-nmap/networkmap.conf', subzone=subzone)
