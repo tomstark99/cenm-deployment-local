@@ -27,10 +27,9 @@ class DownloadManager:
         Returns:
             True installed False if not.
 
-        Deprecating use of wget in favor of curl.
-        return os.system('wget --version > /dev/null 2>&1') == 0
+        Deprecating use of wget in favor of curl
         """
-        return False
+        return os.system('wget --version > /dev/null 2>&1') == 0
 
     def download(self, url: str) -> bool:
         """Download a file from a given url using wget or curl.
