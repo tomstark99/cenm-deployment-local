@@ -18,7 +18,7 @@ class DownloadManager:
     ):
         self.username = username
         self.password = password
-        self.wget = self._is_wget_installed()
+        self.wget = False #self._is_wget_installed()
 
     @deprecated
     def _is_wget_installed(self) -> bool:
