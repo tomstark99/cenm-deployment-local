@@ -71,7 +71,8 @@ class BaseService(ABC):
     def _check_presence(self) -> bool:
         for _, _, files in os.walk(self.dir):
             if f'{self.artifact_name}.jar' in files or f'{self.artifact_name}-{self.version}.jar' in files:
-                print(f'{self.artifact_name}-{self.version} already exists. Skipping.')
+                # Temporarily muting this message
+                # print(f'{self.artifact_name}-{self.version} already exists. Skipping.')
                 return True
         return False
     
@@ -83,13 +84,29 @@ class BaseService(ABC):
     def download(self) -> bool:
         self._clone_repo()
         if self._check_presence():
-            return
+            return #self.dlm.validate_download(self.url)
         # If artifact not present then download it
         print(f'Downloading {self._zip_name()}')
         self.error = self.dlm.download(self.url)
         self._move()
         return self.error
     
+class SignerPluginService(BaseService):
+
+    def _handle_plugin(self):
+        if not self.sysi.path_exists(f'{self.dir}/plugins'):
+            self.sysi.run(f'mkdir {self.dir}/plugins')
+        self.sysi.run(f'mv {self._zip_name()} {self.dir}/plugins')
+
+    def download(self) -> bool:
+        if self._check_presence():
+            return
+        # If artifact not present then download it
+        print(f'Downloading {self._zip_name()}')
+        self.error = self.dlm.download(self.url)
+        self._handle_plugin()
+        return self.error
+
 class DeploymentService(BaseService):
     """Base service for the the services that also can be deployed
 

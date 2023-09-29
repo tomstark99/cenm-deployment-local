@@ -16,16 +16,27 @@ parser.add_argument(
     help='Create directory structure for CENM deployment and download all current artifacts'
 )
 parser.add_argument(
+    '--download-individual',
+    type=str,
+    help='Download individual artifacts, use a comma separated string of artifacts to download e.g. "pki-tool,identitymanager" to download the pki-tool and identitymanager artifacts'
+)
+parser.add_argument(
     '--generate-certs', 
     default=False, 
     action='store_true', 
     help='Generate certificates and distribute them to services'
 )
 parser.add_argument(
-    '--clean', 
+    '--run-default-deployment', 
     default=False, 
     action='store_true', 
-    help='Remove all generated run-time files'
+    help='Runs a default deployment, following the steps from README'
+)
+parser.add_argument(
+    '--clean-runtime', 
+    default=False, 
+    action='store_true', 
+    help='Remove all generated runtime files'
 )
 parser.add_argument(
     '--clean-certs', 
@@ -46,16 +57,9 @@ parser.add_argument(
     help='Remove all generated service folders'
 )
 parser.add_argument(
-    '--run-default-deployment', 
-    default=False, 
-    action='store_true', 
-    help='Runs a default deployment, following the steps from README'
-)
-parser.add_argument(
-    '--version', 
-    default=False, 
-    action='store_true', 
-    help='Show current cenm version'
+    '--clean-individual-artifacts',
+    type=str,
+    help='Clean individual artifacts, use a comma separated string of artifacts to download e.g. "pki-tool,identitymanager" to clean the pki-tool and identitymanager artifacts'
 )
 parser.add_argument(
     '--health-check-frequency',
@@ -64,20 +68,16 @@ parser.add_argument(
     help='Time to wait between each health check, default is 30 seconds'
 )
 parser.add_argument(
-    '--download-individual',
-    type=str,
-    help='Download individual artifacts, use a comma separated string of artifacts to download e.g. "pki-tool,identitymanager" to download the pki-tool and identitymanager artifacts'
-)
-parser.add_argument(
-    '--clean-individual-artifacts',
-    type=str,
-    help='Clean individual artifacts, use a comma separated string of artifacts to download e.g. "pki-tool,identitymanager" to clean the pki-tool and identitymanager artifacts'
-)
-parser.add_argument(
     '--validate',
     default=False, 
     action='store_true',
     help='Check which artifacts are present'
+)
+parser.add_argument(
+    '--version', 
+    default=False, 
+    action='store_true', 
+    help='Show current cenm version'
 )
 
 # Check if .env file exists
@@ -102,14 +102,14 @@ except KeyError as e:
 
 def validate_arguments(args: argparse.Namespace):
     # Check if only one of the clean flags are used
-    clean_args = [args.clean, args.deep_clean, args.clean_artifacts, args.clean_certs]
+    clean_args = [args.clean_runtime, args.deep_clean, args.clean_artifacts, args.clean_certs]
     if sum(clean_args) > 1:
-        raise ValueError("Cannot use more than one of the following flags: --clean, --deep-clean, --clean-artifacts, --clean-certs")
+        raise ValueError("Cannot use more than one of the following flags: --clean-runtime, --deep-clean, --clean-artifacts, --clean-certs")
     # Check if no other arguments are used with --download-individual
     all_args = [
         args.setup_dir_structure, 
         args.generate_certs, 
-        args.clean, 
+        args.clean_runtime, 
         args.clean_certs, 
         args.clean_artifacts, 
         args.deep_clean, 
@@ -153,6 +153,9 @@ def main(args: argparse.Namespace):
 
     validate_arguments(args)
 
+    if args.version:
+        raise NotImplementedError("Version check is not implemented yet")
+
     service_manager = ServiceManager(
         username,
         password,
@@ -175,7 +178,7 @@ def main(args: argparse.Namespace):
         args.deep_clean,
         args.clean_artifacts,
         args.clean_certs,
-        args.clean
+        args.clean_runtime
     )
 
     if args.validate:

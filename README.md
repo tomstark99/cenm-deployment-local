@@ -234,7 +234,16 @@ CENM services should be deployed in a particular order, this being:
 
 12. Verify your gateway is up by navigating to http://localhost:8089
 
-13. Create a 'Main' subzone
+13. Run setupAuth initially to create users in the global zone:
+
+    ```shell
+    cd cenm-auth/setup-auth
+    bash setupAuth.sh
+    ```
+
+    _Note: this script requires [jq](https://stedolan.github.io/jq/download/), a command line JSON processor that can be installed easily in various ways._
+
+14. Create a 'Main' subzone
 
     Navigate to the cenm-tool directory
 
@@ -242,7 +251,17 @@ CENM services should be deployed in a particular order, this being:
     cd cenm-gateway/cenm-tool
     ```
 
-    For creating a subzone, you need the `network-maintainer` login
+    First set your global zone config for identity manager and network map:
+
+    ```shell
+    ./cenm context login -s http://127.0.0.1:8089 -u config-maintainer -p <password>
+    ./cenm identity-manager config set-admin-address -a=127.0.0.1:5053
+    ./cenm identity-manager config set -f=identitymanager.conf --zone-token
+    ./cenm netmap config set-admin-address -a=127.0.0.1:5053
+    ./cenm context logout http://127.0.0.1:8089
+    ```
+
+    To create a subzone, you need the `network-maintainer` login:
 
     ```shell
     ./cenm context login -s http://127.0.0.1:8089 -u network-maintainer -p <password>
@@ -253,11 +272,33 @@ CENM services should be deployed in a particular order, this being:
         --label=Main \
         --label-color='#941213' \
         --zone-token
+    ./cenm context logout http://127.0.0.1:8089
     ```
 
-    Make a note of the zone token that is returned in case you need it later (for example if you are using the angel service)
+    Make a note of the zone tokens that are returned in case you need it later (for example if you are using the angel service).
 
-14. Set your zone config
+    Next set your signer config globally:
+
+    ```shell
+    ./cenm context login -s http://127.0.0.1:8089 -u config-maintainer -p <password>
+    ./cenm signer config set-admin-address -a=127.0.0.1:5054
+    ./cenm signer config set -f=signer.conf
+    ```
+
+    Get your subzone id:
+
+    ```shell
+    ./cenm zone get-subzones
+    ```
+
+    Set your network map config for the subzone and replace the `<SUBZONE_ID>` with the id returned from:
+
+    ```shell
+    ./cenm netmap config set -s <SUBZONE_ID> -f=networkmap.conf
+    ./cenm context logout http://127.0.0.1:8089
+    ```
+
+<!-- 15. Set your zone config
 
     Set the 'Main' zone config to be the same as the global zone, for this you will need the `config-maintainer` login
 
@@ -271,7 +312,7 @@ CENM services should be deployed in a particular order, this being:
         --zone-token
     ```
 
-    Again, make a note of the zone token that is returned in case you need it later (for example if you are using the angel service)
+    Again, make a note of the zone token that is returned in case you need it later (for example if you are using the angel service) -->
     
 15. To grant your users access to the new subzone, replace the `<SUBZONE_ID>` with the id returned from
 
@@ -287,7 +328,7 @@ CENM services should be deployed in a particular order, this being:
     for file in *.json; do perl -i -pe "s/<SUBZONE_ID>/1/g" $file; done
     ```
 
-    After this run:
+    After this run setupAuth again:
 
     ```shell
     setupAuth.sh

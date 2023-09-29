@@ -6,6 +6,12 @@ from managers.deployment_manager import DeploymentManager
 from utils import *
 from typing import List
 
+class ServiceError(Exception):
+    def __init__(self, service, dir):
+        super().__init__("""
+{} artifact not found in {} directory, please try and download agian.
+        """.format(service, dir))
+
 class ServiceManager:
     """A manager to manage operations on all CENM services including:
         
@@ -197,6 +203,24 @@ class ServiceManager:
             password=       password,
             config_file=    'signer.conf',
             deployment_time=Constants.SIGNER_DEPLOY_TIME.value)
+        self.SIGNER_CA_PLUGIN = SignerPluginCAService(
+            abb=            'signer-ca-plugin',
+            dir=            'signer',
+            artifact_name=  'signing-service-example-plugin-ca',
+            version=        cenm_version,
+            ext=            'jar',
+            url=            f'{self.base_url}/{self.enm_package}/signing-service-plugins',
+            username=       username,
+            password=       password)
+        self.SIGNER_NONCA_PLUGIN = SignerPluginNonCAService(
+            abb=            'signer-nonca-plugin',
+            dir=            'signer',
+            artifact_name=  'signing-service-example-plugin-nonca',
+            version=        cenm_version,
+            ext=            'jar',
+            url=            f'{self.base_url}/{self.enm_package}/signing-service-plugins',
+            username=       username,
+            password=       password)
         self.ZONE = ZoneService(
             abb=            'zone',
             dir=            'zone',
@@ -229,6 +253,8 @@ class ServiceManager:
             self.CORDA_SHELL,
             self.PKI,
             self.SIGNER,
+            self.SIGNER_CA_PLUGIN,
+            self.SIGNER_NONCA_PLUGIN,
             self.ZONE
         ]
 
@@ -269,8 +295,18 @@ class ServiceManager:
     def check_all(self):
         check_errors = {}
         for service in self._get_all_services():
-            check_errors[f'{service.artifact_name}-{service.version}'] = (not service._check_presence())
-        self.printer.print_end_of_check_report(check_errors)
+            # self.logger.info(f'validating {service.artifact_name} config')
+            if (not service._check_presence()):
+                check_errors[f'{service.artifact_name}-{service.version}'] = service.dir
+
+        if any(check_errors.values()):
+            exceptions = []
+            for service, dir in check_errors.items():
+                exceptions.append(ServiceError(service, dir))
+            print("There were service that were not found, check the logs")
+            raise ExceptionGroup("Combined service exceptions", exceptions)
+        # else:
+            # self.printer.print_end_of_check_report(check_errors)
 
     def download_specific(self, services: List[str]):
         print("Downloading individual artifacts does not work with any other arguments, script will exit after downloading.")
@@ -286,6 +322,7 @@ class ServiceManager:
         self.printer.print_end_of_script_report(download_errors, download_errors_db)
 
     def deploy_all(self, health_check_frequency: int):
+        self.check_all()
         self.config_manager.validate_services(self.get_deployment_services())
         self.deployment_manager.deploy_services(health_check_frequency)
 

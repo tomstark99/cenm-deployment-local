@@ -1,5 +1,5 @@
 from pyhocon import ConfigFactory
-from services.base_services import BaseService, DeploymentService, NodeDeploymentService
+from services.base_services import BaseService, SignerPluginService, DeploymentService, NodeDeploymentService
 from managers.certificate_manager import CertificateManager
 from utils import Constants
 from time import sleep
@@ -136,7 +136,8 @@ class CrrToolService(BaseService):
     def _check_presence(self) -> bool:
         for _, _, files in os.walk(f'{self.dir}/tools/{self.artifact_name}'):
             if 'crrsubmissiontool.jar' in files:
-                print(f'crrsubmissiontool.jar already exists. Skipping.')
+                # Temporarily muting this message
+                # print(f'crrsubmissiontool.jar already exists. Skipping.')
                 return True
         return False
 
@@ -193,10 +194,18 @@ class NetworkMapService(DeploymentService):
         super().deploy()
 
 class NotaryService(NodeDeploymentService):
-    pass
+    
+    def _move(self):
+        self.sysi.run(f'mv {self._zip_name()} {self.dir}/{self._zip_name()}')
+        if self.sysi.path_exists('cenm-node'):
+            self.sysi.run(f'mv {self._zip_name()} cenm-node/{self._zip_name()} > /dev/null 2>&1')
 
 class NodeService(NodeDeploymentService):
-    pass
+
+    def _move(self):
+        self.sysi.run(f'mv {self._zip_name()} {self.dir}/{self._zip_name()}')
+        if self.sysi.path_exists('cenm-notary'):
+            self.sysi.run(f'mv {self._zip_name()} cenm-notary/{self._zip_name()} > /dev/null 2>&1')
 
 class CordaShellService(BaseService):
 
@@ -220,7 +229,8 @@ class PkiToolService(DeploymentService):
     def _check_presence(self) -> bool:
         for _, _, files in os.walk(self.dir):
             if 'pkitool.jar' in files:
-                print(f'pkitool.jar already exists. Skipping.')
+                # Temporarily muting this message
+                # print(f'pkitool.jar already exists. Skipping.')
                 return True
         return False
 
@@ -267,6 +277,12 @@ class PkiToolService(DeploymentService):
                     self.sysi.remove(os.path.join(root, dir))
 
 class SignerService(DeploymentService):
+    pass
+
+class SignerPluginNonCAService(SignerPluginService):
+    pass
+
+class SignerPluginCAService(SignerPluginService):
     pass
 
 class ZoneService(DeploymentService):

@@ -106,6 +106,9 @@ class Logger:
 class Printer:
     """Printer for standard printing
 
+    Deprecated class: use ExceptionGroup in favour.
+    other print statements can be done inline in class
+
     """
     def __init__(self,
         cenm_version: str,
