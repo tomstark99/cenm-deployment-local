@@ -31,7 +31,7 @@ If you already have a CENM deployment you can omit the `--clean` flag and the de
 Clone this repo locally:
 
 ```shell
-git clone https://github.com/tomstark99/cenm-deployment-local.git
+git clone --branch=dev/tom https://github.com/tomstark99/cenm-deployment-local.git
 ```
 
 next, rename the `.env.template` file to `.env`, here you will fill in your credentials
