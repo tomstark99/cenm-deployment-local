@@ -90,7 +90,7 @@ options:
                         Runs a default deployment, following the steps from README
   --clean-runtime       Remove all generated runtime files
   --clean-certs         Remove all generated certificates
-  --clean-artifacts     Remove all downloaded artifacts and generated certificates
+  --clean-artifacts     Remove all downloaded artifacts
   --deep-clean          Remove all generated service folders
   --clean-individual-artifacts CLEAN_INDIVIDUAL_ARTIFACTS
                         Clean individual artifacts, use a comma separated string of artifacts to download e.g.
