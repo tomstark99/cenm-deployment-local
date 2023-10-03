@@ -64,15 +64,17 @@ Once you have saved this file, you can run the Python script with the following 
 $ python3 setup_script.py -h
 usage: setup_script.py [-h]
                        [--setup-dir-structure]
+                       [--download-individual DOWNLOAD_INDIVIDUAL]
                        [--generate-certs]
-                       [--clean] [--clean-certs]
+                       [--run-default-deployment]
+                       [--clean-runtime]
+                       [--clean-certs]
                        [--clean-artifacts]
                        [--deep-clean]
-                       [--run-default-deployment]
-                       [--version]
-                       [--health-check-frequency HEALTH_CHECK_FREQUENCY]
-                       [--download-individual DOWNLOAD_INDIVIDUAL]
                        [--clean-individual-artifacts CLEAN_INDIVIDUAL_ARTIFACTS]
+                       [--health-check-frequency HEALTH_CHECK_FREQUENCY]
+                       [--validate]
+                       [--version]
 
 Download CENM artifacts from Artifactory
 
@@ -80,22 +82,23 @@ options:
   -h, --help            show this help message and exit
   --setup-dir-structure
                         Create directory structure for CENM deployment and download all current artifacts
-  --generate-certs      Generate certificates and distribute them to services
-  --clean               Remove all generated run-time files
-  --clean-certs         Remove all generated certificates
-  --clean-artifacts     Remove all downloaded artifacts and generated certificates
-  --deep-clean          Remove all generated service folders
-  --run-default-deployment
-                        Runs a default deployment, following the steps from README
-  --version             Show current cenm version
-  --health-check-frequency HEALTH_CHECK_FREQUENCY
-                        Time to wait between each health check, default is 30 seconds
   --download-individual DOWNLOAD_INDIVIDUAL
                         Download individual artifacts, use a comma separated string of artifacts to download e.g.
                         "pki-tool,identitymanager" to download the pki-tool and identitymanager artifacts
+  --generate-certs      Generate certificates and distribute them to services
+  --run-default-deployment
+                        Runs a default deployment, following the steps from README
+  --clean-runtime       Remove all generated runtime files
+  --clean-certs         Remove all generated certificates
+  --clean-artifacts     Remove all downloaded artifacts and generated certificates
+  --deep-clean          Remove all generated service folders
   --clean-individual-artifacts CLEAN_INDIVIDUAL_ARTIFACTS
                         Clean individual artifacts, use a comma separated string of artifacts to download e.g.
                         "pki-tool,identitymanager" to clean the pki-tool and identitymanager artifacts
+  --health-check-frequency HEALTH_CHECK_FREQUENCY
+                        Time to wait between each health check, default is 30 seconds
+  --validate            Check which artifacts are present
+  --version             Show current cenm version
 ```
 
 The following command will download all the config files in the correct directories as well as download all the artifacts with the versions specified in `.env`:
