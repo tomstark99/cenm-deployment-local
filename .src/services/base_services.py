@@ -4,7 +4,6 @@ from pyhocon import ConfigFactory
 from managers.download_manager import DownloadManager
 from utils import SystemInteract, Logger, Constants
 import glob
-import logging
 
 class BaseService(ABC):
     """Base service for all services to inherit.
@@ -131,7 +130,8 @@ class DeploymentService(BaseService):
         username: str,
         password: str,
         config_file: str,
-        deployment_time: int
+        deployment_time: int,
+        certificates: int = None
     ):
         super().__init__(
             abb, 
@@ -148,12 +148,17 @@ class DeploymentService(BaseService):
         self.runtime_files = Constants.RUNTIME_FILES.value
         self.config_file = config_file
         self.deployment_time = deployment_time
+        self.certificates = certificates
 
     def __str__(self) -> str:
         return f"DeploymentService[{self.abb}, {self.dir}, {self.artifact_name}, {self.ext}, {self.version}]"
 
     def __repr__(self):
         return self.__str__()
+
+    def _get_cert_count(self) -> bool:
+        cert_count = self.sysi.run_get_stdout(f"ls {self.dir}/certificates | xargs | wc -w | sed -e 's/^ *//g'")
+        return int(cert_count)
         
     def deploy(self):
         self.logger.info(f'Thread started to deploy {self.artifact_name}')
@@ -166,12 +171,18 @@ class DeploymentService(BaseService):
             except:
                 self.logger.warning(f'{self.artifact_name} service stopped. Restarting...')
 
-    def validate(self) -> str:
+    def validate_config(self) -> str:
         try:
             ConfigFactory.parse_file(f'{self.dir}/{self.config_file}')
             return ""
         except Exception as e:
             return str(e)
+
+    def validate_certs(self) -> str:
+        if self._get_cert_count() < self.certificates:
+            return f'Certificate mismatch ({self._get_cert_count()} found, {self.certificates} expected)'
+        else:
+            return ""
 
     def clean_runtime(self):
         for root, dirs, files in os.walk(self.dir):

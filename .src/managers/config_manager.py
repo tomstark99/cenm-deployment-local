@@ -16,11 +16,11 @@ class ConfigManager:
         self.logger = Logger().get_logger(__name__)
         self.sysi = SystemInteract()
 
-    def validate_services(self, services: List[DeploymentService]):
+    def validate(self, services: List[DeploymentService]):
         validation_errors = {}
         for service in services:
             self.logger.info(f'validating {service.artifact_name} config')
-            validation_errors[service.artifact_name] = service.validate()
+            validation_errors[service.artifact_name] = service.validate_config()
 
         if any(validation_errors.values()):
             exceptions = []
