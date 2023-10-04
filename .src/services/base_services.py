@@ -224,8 +224,8 @@ class NodeDeploymentService(DeploymentService):
         self.logger.info('Registering node to the network')
         exit_code = -1
         while exit_code != 0:
-            self.logger.debug(f'[Running] (cd {self.dir} && java -jar {artifact_name}.jar -f {self.config_file} --initial-registration --network-root-truststore ./certificates/network-root-truststore.jks --network-root-truststore-password trustpass) to start {self.artifact_name} service')
-            exit_code = self.sysi.run_get_exit_code(f'(cd {self.dir} && java -jar {artifact_name}.jar -f {self.config_file} --initial-registration --network-root-truststore ./certificates/network-root-truststore.jks --network-root-truststore-password trustpass)')
+            self.logger.debug(f'[Running] (cd {self.dir} && java -jar {artifact_name}.jar initial-registration --network-root-truststore ./certificates/network-root-truststore.jks --network-root-truststore-password trustpass -f {self.config_file}) to start {self.artifact_name} service')
+            exit_code = self.sysi.run_get_exit_code(f'(cd {self.dir} && java -jar {artifact_name}.jar initial-registration --network-root-truststore ./certificates/network-root-truststore.jks --network-root-truststore-password trustpass -f {self.config_file})')
         self.logger.info(f'Sleeping for 2 minutes to allow registration to complete and for network parameters to be signed')
         self.sysi.sleep(120)
 
