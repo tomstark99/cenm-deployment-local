@@ -1,10 +1,21 @@
-from utils import SystemInteract
+from utils import SystemInteract, Logger
+from typing import List
+from services.base_services import DeploymentService
+
+class CertificateError(Exception):
+    def __init__(self, service, message):
+        super().__init__("""
+Certificate exception for service: {}
+
+    The following error was found while validating certificates: {}
+        """.format(service, message))
 
 class CertificateManager:
     """Manages the certificates for the CENM deployment.
 
     """
     def __init__(self):
+        self.logger = Logger().get_logger(__name__)
         self.sysi = SystemInteract()
 
     def _copy(self, source, destination):
@@ -98,3 +109,18 @@ class CertificateManager:
             exits.append(self.sysi.run_get_exit_code(f'(cd cenm-pki && java -jar pkitool.jar -f pki.conf)'))
         self._distribute_certs()
         return max(exits)
+
+    def validate(self, services: List[DeploymentService]):
+        validation_errors = {}
+        for service in services:
+            self.logger.info(f'validating {service.artifact_name} certificates')
+            validation_errors[service.artifact_name] = service.validate_certs()
+
+        if any(validation_errors.values()):
+            exceptions = []
+            for service, message in validation_errors.items():
+                if message:
+                    self.logger.error(f'{service} certificate validation failed')
+                    exceptions.append(CertificateError(service, message))
+            print("There were certificate validation errors, check the logs")
+            raise ExceptionGroup("Combined certificate exceptions", exceptions)

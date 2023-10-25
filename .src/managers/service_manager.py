@@ -4,7 +4,7 @@ from managers.database_manager import DatabaseManager
 from managers.download_manager import DownloadManager
 from managers.deployment_manager import DeploymentManager
 from utils import *
-from typing import List
+from typing import List, Dict, Tuple, Any
 
 class ServiceError(Exception):
     def __init__(self, service, dir):
@@ -71,7 +71,8 @@ class ServiceManager:
             username=       username,
             password=       password,
             config_file=    'auth.conf',
-            deployment_time=Constants.AUTH_DEPLOY_TIME.value)
+            deployment_time=Constants.AUTH_DEPLOY_TIME.value,
+            certificates=   2)
         self.CLIENT = AuthClientService(
             abb=            'client',
             dir=            'auth',
@@ -100,7 +101,8 @@ class ServiceManager:
             username=       username,
             password=       password,
             config_file=    'gateway.conf',
-            deployment_time=Constants.GATEWAY_DEPLOY_TIME.value)
+            deployment_time=Constants.GATEWAY_DEPLOY_TIME.value,
+            certificates=   4)
         self.GATEWAY_PLUGIN = GatewayPluginService(
             abb=            'gateway-plugin',
             dir=            'gateway',
@@ -129,7 +131,8 @@ class ServiceManager:
             username=       username,
             password=       password,
             config_file=    'identitymanager.conf',
-            deployment_time=Constants.IDMAN_DEPLOY_TIME.value)
+            deployment_time=Constants.IDMAN_DEPLOY_TIME.value,
+            certificates=   3)
         self.CRR_TOOL = CrrToolService(
             abb=            'crr-tool',
             dir=            'idman',
@@ -149,7 +152,8 @@ class ServiceManager:
             username=       username,
             password=       password,
             config_file=    'networkmap.conf',
-            deployment_time=Constants.NMAP_DEPLOY_TIME.value)
+            deployment_time=Constants.NMAP_DEPLOY_TIME.value,
+            certificates=   4)
         self.NOTARY = NotaryService(
             abb=            'notary',
             dir=            'notary',
@@ -202,7 +206,8 @@ class ServiceManager:
             username=       username,
             password=       password,
             config_file=    'signer.conf',
-            deployment_time=Constants.SIGNER_DEPLOY_TIME.value)
+            deployment_time=Constants.SIGNER_DEPLOY_TIME.value,
+            certificates=   6)
         self.SIGNER_CA_PLUGIN = SignerPluginCAService(
             abb=            'signer-ca-plugin',
             dir=            'signer',
@@ -231,7 +236,8 @@ class ServiceManager:
             username=       username,
             password=       password,
             config_file=    '',
-            deployment_time=Constants.ZONE_DEPLOY_TIME.value)
+            deployment_time=Constants.ZONE_DEPLOY_TIME.value,
+            certificates=   2)
 
         self.db_manager = DatabaseManager(self.get_database_services(), DownloadManager(username, password))
         self.config_manager = ConfigManager()
@@ -264,47 +270,68 @@ class ServiceManager:
                 return service
         raise ValueError(f'No service with name {name}')
 
-    def get_deployment_services(self) -> List[DeploymentService]:
+    def get_deployment_services(self, pure_cenm: bool = False) -> List[DeploymentService]:
         """These services are returned in order they should be deployed
 
-        For default deployments, don't change the order
+        For default deployments: do not change the order
         
         """
-        return [
-            self.IDMAN,
-            self.SIGNER,
-            self.NOTARY,
-            self.NMAP,
-            self.AUTH,
-            self.GATEWAY,
-            self.ZONE
-        ]
+        if pure_cenm:
+            return [
+                self.IDMAN,
+                self.SIGNER,
+                self.NMAP,
+                self.AUTH,
+                self.GATEWAY,
+                self.ZONE
+            ]
+        else:
+            return [
+                self.IDMAN,
+                self.SIGNER,
+                self.NOTARY,
+                self.NMAP,
+                self.AUTH,
+                self.GATEWAY,
+                self.ZONE
+            ]
 
     def get_database_services(self) -> List[BaseService]:
         return [service for service in self._get_all_services() if service.abb in self.db_services]
 
+    def _raise_exception_group(self, errors: Dict[Tuple[str, str], Any]):
+        if any(errors.values()):
+            exceptions = []
+            for (service, dir), error in errors.items():
+                if error:
+                    exceptions.append(ServiceError(service, dir))
+            print("There were service that were not found, check the logs")
+            raise ExceptionGroup("Combined service exceptions", exceptions)
+
     def download_all(self):
         download_errors = {}
         for service in self._get_all_services():
-            download_errors[service.artifact_name] = service.download()
+            download_errors[(f'{service.artifact_name}-{service.version}', service.dir)] = service.download()
 
         download_errors_db = self.db_manager.download()
-        self.printer.print_end_of_script_report(download_errors, download_errors_db)
+        # self.printer.print_end_of_script_report(download_errors, download_errors_db)
+
+        # self._raise_exception_group(download_errors)
+        # self._raise_exception_group(download_errors_db)
         self.check_all()
 
     def check_all(self):
         check_errors = {}
+        print("Validating services")
         for service in self._get_all_services():
             # self.logger.info(f'validating {service.artifact_name} config')
             if (not service._check_presence()):
-                check_errors[f'{service.artifact_name}-{service.version}'] = service.dir
-
-        if any(check_errors.values()):
-            exceptions = []
-            for service, dir in check_errors.items():
-                exceptions.append(ServiceError(service, dir))
-            print("There were service that were not found, check the logs")
-            raise ExceptionGroup("Combined service exceptions", exceptions)
+                check_errors[(f'{service.artifact_name}-{service.version}', service.dir)] = service.dir
+                print(u'[\u274c] ' + f'{service.artifact_name}-{service.version}')
+            else:
+                print(u'[\u2705] ' + f'{service.artifact_name}-{service.version}')
+        self._raise_exception_group(check_errors)
+        print("Validating complete")
         # else:
             # self.printer.print_end_of_check_report(check_errors)
 
@@ -314,20 +341,26 @@ class ServiceManager:
         for service in services:
             try:
                 service = self.get_service(service)
-                download_errors[service.artifact_name] = service.download()
+                download_errors[(f'{service.artifact_name}-{service.version}', service.dir)] = service.download()
             except ValueError as e:
                 print(e)
                 download_errors[service] = str(e)
         download_errors_db = self.db_manager.download()
-        self.printer.print_end_of_script_report(download_errors, download_errors_db)
+        # self.printer.print_end_of_script_report(download_errors, download_errors_db)
+
+        # self._raise_exception_group(download_errors)
+        # self._raise_exception_group(download_errors_db)
+        self.check_all()
 
     def deploy_all(self, health_check_frequency: int):
         self.check_all()
-        self.config_manager.validate_services(self.get_deployment_services())
+        self.config_manager.validate(self.get_deployment_services())
+        self.PKI.validate_certificates(self.get_deployment_services(pure_cenm=True))
         self.deployment_manager.deploy_services(health_check_frequency)
 
     def generate_certificates(self):
-        self.config_manager.validate_services([*self.get_deployment_services(), self.NODE, self.PKI])
+        self.check_all()
+        self.config_manager.validate([*self.get_deployment_services(), self.NODE, self.PKI])
         self.PKI.deploy()
 
     def clean_all(self,

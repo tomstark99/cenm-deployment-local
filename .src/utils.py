@@ -290,9 +290,11 @@ class CenmTool:
         tokens = {}
 
         self.set_admin_address('identity-manager', 'localhost:5053')
+        # print(self.sysi.run_get_stdout(f'(cd {self.path} && cat ../../cenm-idman/identitymanager.conf)'))
         tokens['idman'] = self.set_config('identity-manager', '../../cenm-idman/identitymanager.conf')
         
         self.set_admin_address('netmap', 'localhost:5055')
+        # print(self.sysi.run_get_stdout(f'(cd {self.path} && cat ../../cenm-nmap/networkparameters.conf)'))
         tokens['nmap'] = self.create_zone(
             config_file='../../cenm-nmap/networkmap.conf',
             network_map_address='localhost:20000',
@@ -301,8 +303,12 @@ class CenmTool:
             label_color='#941213'
         )
         self.set_admin_address('signer', 'localhost:5054')
+        # print(self.sysi.run_get_stdout(f'(cd {self.path} && cat ../../cenm-signer/signer.conf)'))
         tokens['signer'] = self.set_config('signer', '../../cenm-signer/signer.conf')
 
     def cenm_set_subzone_config(self, subzone: str) -> str:
-        # self.set_admin_address('netmap', 'localhost:5055', subzone=subzone)
+        # necessary step?
+        self.set_admin_address('identity-manager', 'localhost:5053', subzone=subzone)
+        self.set_admin_address('netmap', 'localhost:5055', subzone=subzone)
+
         return self.set_config('netmap', '../../cenm-nmap/networkmap.conf', subzone=subzone)

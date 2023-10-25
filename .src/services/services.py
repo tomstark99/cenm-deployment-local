@@ -1,13 +1,11 @@
 from pyhocon import ConfigFactory
 from services.base_services import BaseService, SignerPluginService, DeploymentService, NodeDeploymentService
 from managers.certificate_manager import CertificateManager
-from utils import Constants
+from typing import List
 from time import sleep
 import glob
 import os
 import re
-import threading
-
 
 class AuthService(DeploymentService):
 
@@ -64,6 +62,11 @@ class GatewayService(DeploymentService):
         self._handle_gateway()
         return self.error
 
+    def _get_cert_count(self) -> bool:
+        cert_count_1 = self.sysi.run_get_stdout(f"ls {self.dir}/private/certificates | xargs | wc -w | sed -e 's/^ *//g'")
+        cert_count_2 = self.sysi.run_get_stdout(f"ls {self.dir}/public/certificates | xargs | wc -w | sed -e 's/^ *//g'")
+        return int(cert_count_1) + int(cert_count_2)
+
     def deploy(self):
         self.logger.info(f'Thread started to deploy {self.artifact_name}')
         artifact_name = f'{self.artifact_name}-{self.version}'
@@ -76,13 +79,19 @@ class GatewayService(DeploymentService):
             except:
                 self.logger.warning(f'{self.artifact_name} service stopped. Restarting...')
 
-    def validate(self) -> str:
+    def validate_config(self) -> str:
         try:
             ConfigFactory.parse_file(f'{self.dir}/private/{self.config_file}')
             ConfigFactory.parse_file(f'{self.dir}/public/{self.config_file}')
             return ""
         except Exception as e:
             return str(e)
+
+    def validate_certs(self) -> str:
+        if self._get_cert_count() < self.certificates:
+            return f'Certificate mismatch ({self._get_cert_count()} found, {self.certificates} expected)'
+        else:
+            return ""
 
 class GatewayPluginService(BaseService):
 
@@ -247,10 +256,18 @@ class PkiToolService(DeploymentService):
     def deploy(self):
         cert_manager = CertificateManager()
         exit_code = -1
-        while exit_code != 0:
-            exit_code = cert_manager.generate()
+        try:
+            while exit_code != 0:
+                exit_code = cert_manager.generate()
+        except KeyboardInterrupt:
+            print('Certificate generation cancelled')
+            exit(1)
 
-    def validate(self) -> str:
+    def validate_certificates(self, services: List[DeploymentService]):
+        cert_manager = CertificateManager()
+        cert_manager.validate(services)
+
+    def validate_config(self) -> str:
         try:
             ConfigFactory.parse_file(f'{self.dir}/{self.config_file}')
             return ""
@@ -297,5 +314,5 @@ class ZoneService(DeploymentService):
             except:
                 self.logger.warning(f'{self.artifact_name} service stopped. Restarting...')
     
-    def validate(self) -> str:
+    def validate_config(self) -> str:
         return ""
