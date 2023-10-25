@@ -270,7 +270,7 @@ class ServiceManager:
                 return service
         raise ValueError(f'No service with name {name}')
 
-    def get_deployment_services(self, pure_cenm=False) -> List[DeploymentService]:
+    def get_deployment_services(self, pure_cenm: bool = False) -> List[DeploymentService]:
         """These services are returned in order they should be deployed
 
         For default deployments: do not change the order
