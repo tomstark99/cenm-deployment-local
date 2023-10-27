@@ -3,6 +3,7 @@ from managers.config_manager import ConfigManager
 from managers.database_manager import DatabaseManager
 from managers.download_manager import DownloadManager
 from managers.deployment_manager import DeploymentManager
+from managers.node_manager import NodeManager
 from utils import *
 from typing import List, Dict, Tuple, Any
 
@@ -44,14 +45,17 @@ class ServiceManager:
         gateway_version: str,
         cenm_version: str,
         nms_visual_version: str,
-        corda_version: str
+        corda_version: str,
+        node_count: int
     ):
         self.base_url = Constants.BASE_URL.value
         self.ext_package = Constants.EXT_PACKAGE.value
         self.enm_package = Constants.ENM_PACKAGE.value
         self.corda_package = Constants.CORDA_PACKAGE.value
+        self.cordapp_package = Constants.CORDAPP_PACKAGE.value
         self.repos = Constants.REPOS.value
         self.db_services = Constants.DB_SERVICES.value
+        self.node_count = node_count
         self.sysi = SystemInteract()
         self.printer = Printer(
             cenm_version,
@@ -176,6 +180,24 @@ class ServiceManager:
             password=       password,
             config_file=    'node.conf',
             deployment_time=Constants.NODE_DEPLOY_TIME.value)
+        self.FINANCE_CONTRACTS_CORDAPP = FinanceContractsCordapp(
+            abb=            'finance-contracts',
+            dir=            'node',
+            artifact_name=  'corda-finance-contracts',
+            version=        corda_version,
+            ext=            'jar',
+            url=            f'{self.base_url}/{self.cordapp_package}',
+            username=       username,
+            password=       password)
+        self.FINANCE_WORKFLOWS_CORDAPP = FinanceWorkflowsCordapp(
+            abb=            'finance-workflows',
+            dir=            'node',
+            artifact_name=  'corda-finance-workflows',
+            version=        corda_version,
+            ext=            'jar',
+            url=            f'{self.base_url}/{self.cordapp_package}',
+            username=       username,
+            password=       password)
         self.CORDA_SHELL = CordaShellService(
             abb=            'shell',
             dir=            'node',
@@ -256,6 +278,8 @@ class ServiceManager:
             self.NMAP,
             self.NOTARY,
             self.NODE,
+            self.FINANCE_CONTRACTS_CORDAPP,
+            self.FINANCE_WORKFLOWS_CORDAPP,
             self.CORDA_SHELL,
             self.PKI,
             self.SIGNER,
@@ -263,6 +287,9 @@ class ServiceManager:
             self.SIGNER_NONCA_PLUGIN,
             self.ZONE
         ]
+
+    def _get_node_manager(self) -> NodeManager:
+        return NodeManager(self.NODE, self.node_count)
 
     def get_service(self, name: str) -> BaseService:
         for service in self._get_all_services():
@@ -358,6 +385,11 @@ class ServiceManager:
         self.PKI.validate_certificates(self.get_deployment_services(pure_cenm=True))
         self.deployment_manager.deploy_services(health_check_frequency)
 
+    def deploy_nodes(self, health_check_frequency: int):
+        node_manager = self._get_node_manager()
+        self.config_manager.validate(node_manager.new_nodes)
+        node_manager.deploy_nodes(health_check_frequency)
+
     def generate_certificates(self):
         self.check_all()
         self.config_manager.validate([*self.get_deployment_services(), self.NODE, self.PKI])
@@ -367,19 +399,29 @@ class ServiceManager:
         clean_deep: bool,
         clean_artifacts: bool,
         clean_certs: bool,
-        clean_runtime: bool
+        clean_runtime: bool,
+        clean_nodes: bool
     ):
-        self.sysi.remove(".logs/*", silent=True)
-        for service in [*self.get_deployment_services(), self.NODE, self.PKI]:
-            if clean_deep:
-                service.clean_all()
-                continue
-            if clean_artifacts:
-                service.clean_artifacts()
-            if clean_certs:
-                service.clean_certificates()
-            if clean_runtime:
-                service.clean_runtime()
+        if clean_nodes:
+            node_manager = self._get_node_manager()
+            node_manager.clean_deployment_nodes(
+                clean_deep,
+                clean_artifacts,
+                clean_certs,
+                clean_runtime
+            )
+        else:
+            self.sysi.remove(".logs/*", silent=True)
+            for service in [*self.get_deployment_services(), self.NODE, self.PKI]:
+                if clean_deep:
+                    service.clean_all()
+                    continue
+                if clean_artifacts:
+                    service.clean_artifacts()
+                if clean_certs:
+                    service.clean_certificates()
+                if clean_runtime:
+                    service.clean_runtime()
 
     def clean_specific_artifacts(self, services: List[str]):
         print("Cleaning individual artifacts does not work with any other arguments, script will exit after downloading.")

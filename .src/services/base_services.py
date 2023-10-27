@@ -4,6 +4,7 @@ from pyhocon import ConfigFactory
 from managers.download_manager import DownloadManager
 from utils import SystemInteract, Logger, Constants
 import glob
+import uuid
 
 class BaseService(ABC):
     """Base service for all services to inherit.
@@ -104,6 +105,22 @@ class SignerPluginService(BaseService):
         print(f'Downloading {self._zip_name()}')
         self.error = self.dlm.download(self.url)
         self._handle_plugin()
+        return self.error
+
+class CordappService(BaseService):
+
+    def _handle_cordapp(self):
+        if not self.sysi.path_exists(f'{self.dir}/cordapps'):
+            self.sysi.run(f'mkdir {self.dir}/cordapps')
+        self.sysi.run(f'mv {self._zip_name()} {self.dir}/cordapps')
+    
+    def download(self) -> bool:
+        if self._check_presence():
+            return
+        # If artifact not present then download it
+        print(f'Downloading {self._zip_name()}')
+        self.error = self.dlm.download(self.url)
+        self._handle_cordapp()
         return self.error
 
 class DeploymentService(BaseService):
@@ -217,8 +234,38 @@ class NodeDeploymentService(DeploymentService):
     def __repr__(self):
         return self.__str__()
 
+    def _construct_new_node_dir(self, new_dir):
+        self.sysi.run(f'cp -r {self.dir} cenm-{new_dir}')
+        node_number = new_dir.split("-")[-1]
+        perl_dir = f'cenm-{new_dir}/node.conf'
+        node_uuid = uuid.uuid4().hex[:5]
+        self.sysi.perl(perl_dir, 'myLegalName.*O\\=\\K.*(?=, L\\=.*)', f'TestNode{node_number}-{node_uuid}')
+        self.sysi.perl(perl_dir, 'p2pAddress.*:\\K.*(?=\\"\\\n)', f'60{node_number}11')
+        self.sysi.perl(perl_dir, '^\\s*address.*:\\K.*(?=\\"\\\n)', f'60{node_number}12')
+        self.sysi.perl(perl_dir, '^\\s*adminAddress.*:\\K.*(?=\\"\\\n)', f'60{node_number}13')
+        self.sysi.perl(perl_dir, '^\\s*port \\= \\K.*(?=\\\n)', f'223{node_number}')
+
+    def _copy(self, new_dir):
+        new_node = NodeDeploymentService(
+            abb=self.abb,
+            dir=new_dir,
+            artifact_name=self.artifact_name,
+            version=self.version,
+            ext=self.ext,
+            url=self.url,
+            username=self.dlm.username,
+            password=self.dlm.password,
+            config_file=self.config_file,
+            deployment_time=self.deployment_time,
+            certificates=self.certificates
+        )
+        if not self.sysi.path_exists(f'cenm-{new_dir}'):
+            self._construct_new_node_dir(new_dir)
+            new_node.download()
+        return new_node
+
     def _is_registered(self) -> bool:
-        return glob.glob(f'cenm-notary/nodeInfo-*')
+        return glob.glob(f'{self.dir}/nodeInfo-*')
 
     def _register_node(self, artifact_name):
         self.logger.info('Registering node to the network')

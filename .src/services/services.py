@@ -1,5 +1,5 @@
 from pyhocon import ConfigFactory
-from services.base_services import BaseService, SignerPluginService, DeploymentService, NodeDeploymentService
+from services.base_services import BaseService, SignerPluginService, CordappService, DeploymentService, NodeDeploymentService
 from managers.certificate_manager import CertificateManager
 from typing import List
 from time import sleep
@@ -232,6 +232,12 @@ class CordaShellService(BaseService):
         self.error = self.dlm.download(self.url)
         self._handle_corda_shell()
         return self.error
+    
+class FinanceContractsCordapp(CordappService):
+    pass
+
+class FinanceWorkflowsCordapp(CordappService):
+    pass
 
 class PkiToolService(DeploymentService):
 

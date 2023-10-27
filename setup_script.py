@@ -33,6 +33,18 @@ parser.add_argument(
     help='Runs a default deployment, following the steps from README'
 )
 parser.add_argument(
+    '--run-node-deployment',
+    default=0,
+    type=int,
+    help='Run node deployments for a given number of nodes'
+)
+parser.add_argument(
+    '--nodes',
+    default=False,
+    action='store_true',
+    help='To be used together with clean arguments to specify cleaning for node directories'
+)
+parser.add_argument(
     '--clean-runtime', 
     default=False, 
     action='store_true', 
@@ -105,6 +117,8 @@ def validate_arguments(args: argparse.Namespace):
     clean_args = [args.clean_runtime, args.deep_clean, args.clean_artifacts, args.clean_certs]
     if sum(clean_args) > 1:
         raise ValueError("Cannot use more than one of the following flags: --clean-runtime, --deep-clean, --clean-artifacts, --clean-certs")
+    if sum(clean_args) < 1 and args.nodes:
+        raise ValueError("Can't specify --nodes without specifying what to clean")
     # Check if no other arguments are used with --download-individual
     all_args = [
         args.setup_dir_structure, 
@@ -114,6 +128,8 @@ def validate_arguments(args: argparse.Namespace):
         args.clean_artifacts, 
         args.deep_clean, 
         args.run_default_deployment, 
+        args.run_node_deployment,
+        args.nodes,
         args.version, 
         (args.health_check_frequency != 30), 
         (not not args.download_individual),  
@@ -134,6 +150,10 @@ def validate_arguments(args: argparse.Namespace):
         warnings.warn("--health-check-frequency is not needed without --run-default-deployment")
     if args.health_check_frequency < 10:
         raise ValueError("Smallest value for --health-check-frequency is 10 seconds")
+    if args.run_node_deployment < 0 or args.run_node_deployment > 9:
+        raise ValueError("Please specify between 0 and 9 nodes")
+    if args.run_default_deployment and args.run_node_deployment:
+        raise ValueError("Please only run one deployment at a time")
     if args.run_default_deployment:
         if SystemInteract().run_get_exit_code("jq --help", silent=True) != 0:
             raise RuntimeError("jq is not installed in your shell, please install it and try again")
@@ -163,7 +183,8 @@ def main(args: argparse.Namespace):
         gateway_version,
         cenm_version,
         nms_visual_version,
-        corda_version
+        corda_version,
+        args.run_node_deployment
     )
 
     if args.download_individual:
@@ -178,7 +199,8 @@ def main(args: argparse.Namespace):
         args.deep_clean,
         args.clean_artifacts,
         args.clean_certs,
-        args.clean_runtime
+        args.clean_runtime,
+        args.nodes
     )
 
     if args.validate:
@@ -192,6 +214,9 @@ def main(args: argparse.Namespace):
 
     if args.run_default_deployment:
         service_manager.deploy_all(args.health_check_frequency)
+
+    if args.run_node_deployment:
+        service_manager.deploy_nodes(args.health_check_frequency)
 
 if __name__ == '__main__':
     main(parser.parse_args())

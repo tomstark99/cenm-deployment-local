@@ -28,6 +28,7 @@ class Constants(Enum):
     EXT_PACKAGE = 'extensions-lib-release-local/com/r3/appeng'
     ENM_PACKAGE = 'r3-enterprise-network-manager/com/r3/enm'
     CORDA_PACKAGE = 'r3-corda-releases/com/r3/corda'
+    CORDAPP_PACKAGE = 'corda-releases/net/corda'
 
     MSSQL_DRIVER = 'https://repo1.maven.org/maven2/com/microsoft/sqlserver/mssql-jdbc/8.2.2.jre8/mssql-jdbc-8.2.2.jre8.jar'
     POSTGRES_DRIVER = 'https://repo1.maven.org/maven2/org/postgresql/postgresql/42.5.2/postgresql-42.5.2.jar'
@@ -48,7 +49,7 @@ class Constants(Enum):
     GATEWAY_DEPLOY_TIME = 5
     ZONE_DEPLOY_TIME = 10
 
-    NODE_DEPLOY_TIME = 60
+    NODE_DEPLOY_TIME = 70
     
 
 class Logger:
@@ -198,6 +199,12 @@ class SystemInteract:
 
     def sleep(self, seconds):
         os.system(f'sleep {seconds}')
+
+    def perl(self, file, predicate, replace, multi_line: bool = False):
+        if multi_line:
+            os.system(f'perl -0777 -i -pe "s/{predicate}/{replace}/" {file}')
+        else:
+            os.system(f'perl -i -pe "s/{predicate}/{replace}/" {file}')
 
     def remove(self, path, silent: bool = False):
         if silent:
