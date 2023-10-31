@@ -212,8 +212,11 @@ class SystemInteract:
         else:
             os.system(f'rm -rf {path}')
 
-    def run(self, cmd):
-        os.system(cmd)
+    def run(self, cmd, silent: bool = False):
+        if silent:
+            os.system(f'{cmd} > /dev/null 2>&1')
+        else:
+            os.system(cmd)
 
     def run_get_exit_code(self, cmd, silent: bool = False) -> int:
         if silent:
