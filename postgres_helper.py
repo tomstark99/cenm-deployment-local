@@ -60,16 +60,11 @@ class PostgresInstance(PostgresService):
     def _wait_for_pod(self):
         status = "init"
         while "running" not in status:
+            sleep(15)
             status = self.sysi.run_get_stdout(f'kubectl get pods -l app.kubernetes.io/instance={self.database_name}'+' -o jsonpath="{.items[*].status.containerStatuses[-1:].state}"')
             logger.info(f"Waiting for pod, current status is: {'init' if not status else status}")
-            sleep(10)
-        logger.info("Sleeping for 10 seconds to allow the pod to breathe")
+        logger.info("Sleeping for 10 seconds to allow the pod start fully")
         sleep(10)
-
-    def _setup_postgres_environment(self):
-        self.sysi.run('export POSTGRES_PASSWORD=$(kubectl get secret --namespace default notary-database-postgresql -o jsonpath="{.data.postgres-password}" | base64 -d)')
-        self.password = self.sysi.run_get_stdout("echo $POSTGRES_PASSWORD")
-        self.sysi.run(f'PGPASSWORD="$POSTGRES_PASSWORD" psql --host 127.0.0.1 -U postgres -d postgres -p 5432 < {self.sql_script}')
 
     def _deploy_helm_chart(self):
         logger.info("Deploying postgres helm chart: 'helm install notary-database bitnami/postgresql'")
@@ -80,10 +75,19 @@ class PostgresInstance(PostgresService):
         logger.info("Thread started to deploy postgres instance")
         try:
             self._deploy_helm_chart()
-            self._setup_postgres_environment()
         except Exception as e:
             logger.info(f"Instance deployment interrupted")
             raise RuntimeError(f"Instance deployment interrupted: {e}")
+
+    def setup_postgres_environment(self):
+        logger.info("Setting up postgres environment")
+        try:
+            self.sysi.run('export POSTGRES_PASSWORD=$(kubectl get secret --namespace default notary-database-postgresql -o jsonpath="{.data.postgres-password}" | base64 -d)')
+            self.password = self.sysi.run_get_stdout(f'kubectl get secret --namespace default {self.database_name}-postgresql'+' -o jsonpath="{.data.postgres-password}" | base64 -d')
+            self.sysi.run(f'PGPASSWORD="{self.password}" psql --host 127.0.0.1 -U postgres -d postgres -p 5432 < {self.sql_script}', silent=True)
+        except Exception as e:
+            logger.info(f"Postgres environment setup interrupted")
+            raise RuntimeError(f'Postgres environment setup interrupted: {e}')
 
 
 class PostgresPortForward(PostgresService):
@@ -167,6 +171,11 @@ class PostgresManager:
             self.processes.append(postgres_portforward_process)
             postgres_portforward_process.start()
 
+            logger.info("Sleeping for 10 seconds to allow ports to forward")
+            sleep(10)
+            self.postgres_instance.setup_postgres_environment()
+            logger.info("Postgres database running, starting health check")
+
             while True:
                 logger.info('Running process health check')
                 for process in self.processes:
@@ -182,7 +191,9 @@ class PostgresManager:
                         self.processes.append(new_process)
                 sleep(health_check_frequency)
 
-        except KeyboardInterrupt:
+        # In theory nothing should go wrong during deployment but if it does we want to clean up
+        # Generally catching BaseException is not great.
+        except BaseException:
             logger.info("Postgres deployment interrupted, cleaning up")
             for process in self.processes:
                 logger.info(f'Terminating {process}')
