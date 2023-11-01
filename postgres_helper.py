@@ -225,7 +225,7 @@ def main(args: argparse.Namespace):
         args.sql_script
     )
 
-    postgres_manager.deploy_postgres(health_check_frequency=5)
+    postgres_manager.deploy_postgres(health_check_frequency=30)
 
 
 if __name__ == '__main__':
