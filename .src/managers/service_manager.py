@@ -3,8 +3,15 @@ from managers.config_manager import ConfigManager
 from managers.database_manager import DatabaseManager
 from managers.download_manager import DownloadManager
 from managers.deployment_manager import DeploymentManager
+from managers.node_manager import NodeManager
 from utils import *
-from typing import List
+from typing import List, Dict, Tuple, Any
+
+class ServiceError(Exception):
+    def __init__(self, service, dir):
+        super().__init__("""
+{} artifact not found in {} directory, please try and download agian.
+        """.format(service, dir))
 
 class ServiceManager:
     """A manager to manage operations on all CENM services including:
@@ -38,14 +45,17 @@ class ServiceManager:
         gateway_version: str,
         cenm_version: str,
         nms_visual_version: str,
-        corda_version: str
+        corda_version: str,
+        node_count: int
     ):
         self.base_url = Constants.BASE_URL.value
         self.ext_package = Constants.EXT_PACKAGE.value
         self.enm_package = Constants.ENM_PACKAGE.value
         self.corda_package = Constants.CORDA_PACKAGE.value
+        self.cordapp_package = Constants.CORDAPP_PACKAGE.value
         self.repos = Constants.REPOS.value
         self.db_services = Constants.DB_SERVICES.value
+        self.node_count = node_count
         self.sysi = SystemInteract()
         self.printer = Printer(
             cenm_version,
@@ -65,7 +75,8 @@ class ServiceManager:
             username=       username,
             password=       password,
             config_file=    'auth.conf',
-            deployment_time=Constants.AUTH_DEPLOY_TIME.value)
+            deployment_time=Constants.AUTH_DEPLOY_TIME.value,
+            certificates=   2)
         self.CLIENT = AuthClientService(
             abb=            'client',
             dir=            'auth',
@@ -94,7 +105,8 @@ class ServiceManager:
             username=       username,
             password=       password,
             config_file=    'gateway.conf',
-            deployment_time=Constants.GATEWAY_DEPLOY_TIME.value)
+            deployment_time=Constants.GATEWAY_DEPLOY_TIME.value,
+            certificates=   4)
         self.GATEWAY_PLUGIN = GatewayPluginService(
             abb=            'gateway-plugin',
             dir=            'gateway',
@@ -123,7 +135,8 @@ class ServiceManager:
             username=       username,
             password=       password,
             config_file=    'identitymanager.conf',
-            deployment_time=Constants.IDMAN_DEPLOY_TIME.value)
+            deployment_time=Constants.IDMAN_DEPLOY_TIME.value,
+            certificates=   3)
         self.CRR_TOOL = CrrToolService(
             abb=            'crr-tool',
             dir=            'idman',
@@ -143,7 +156,8 @@ class ServiceManager:
             username=       username,
             password=       password,
             config_file=    'networkmap.conf',
-            deployment_time=Constants.NMAP_DEPLOY_TIME.value)
+            deployment_time=Constants.NMAP_DEPLOY_TIME.value,
+            certificates=   4)
         self.NOTARY = NotaryService(
             abb=            'notary',
             dir=            'notary',
@@ -166,6 +180,24 @@ class ServiceManager:
             password=       password,
             config_file=    'node.conf',
             deployment_time=Constants.NODE_DEPLOY_TIME.value)
+        self.FINANCE_CONTRACTS_CORDAPP = FinanceContractsCordapp(
+            abb=            'finance-contracts',
+            dir=            'node',
+            artifact_name=  'corda-finance-contracts',
+            version=        corda_version,
+            ext=            'jar',
+            url=            f'{self.base_url}/{self.cordapp_package}',
+            username=       username,
+            password=       password)
+        self.FINANCE_WORKFLOWS_CORDAPP = FinanceWorkflowsCordapp(
+            abb=            'finance-workflows',
+            dir=            'node',
+            artifact_name=  'corda-finance-workflows',
+            version=        corda_version,
+            ext=            'jar',
+            url=            f'{self.base_url}/{self.cordapp_package}',
+            username=       username,
+            password=       password)
         self.CORDA_SHELL = CordaShellService(
             abb=            'shell',
             dir=            'node',
@@ -196,7 +228,26 @@ class ServiceManager:
             username=       username,
             password=       password,
             config_file=    'signer.conf',
-            deployment_time=Constants.SIGNER_DEPLOY_TIME.value)
+            deployment_time=Constants.SIGNER_DEPLOY_TIME.value,
+            certificates=   6)
+        self.SIGNER_CA_PLUGIN = SignerPluginCAService(
+            abb=            'signer-ca-plugin',
+            dir=            'signer',
+            artifact_name=  'signing-service-example-plugin-ca',
+            version=        cenm_version,
+            ext=            'jar',
+            url=            f'{self.base_url}/{self.enm_package}/signing-service-plugins',
+            username=       username,
+            password=       password)
+        self.SIGNER_NONCA_PLUGIN = SignerPluginNonCAService(
+            abb=            'signer-nonca-plugin',
+            dir=            'signer',
+            artifact_name=  'signing-service-example-plugin-nonca',
+            version=        cenm_version,
+            ext=            'jar',
+            url=            f'{self.base_url}/{self.enm_package}/signing-service-plugins',
+            username=       username,
+            password=       password)
         self.ZONE = ZoneService(
             abb=            'zone',
             dir=            'zone',
@@ -207,7 +258,8 @@ class ServiceManager:
             username=       username,
             password=       password,
             config_file=    '',
-            deployment_time=Constants.ZONE_DEPLOY_TIME.value)
+            deployment_time=Constants.ZONE_DEPLOY_TIME.value,
+            certificates=   2)
 
         self.db_manager = DatabaseManager(self.get_database_services(), DownloadManager(username, password))
         self.config_manager = ConfigManager()
@@ -226,11 +278,18 @@ class ServiceManager:
             self.NMAP,
             self.NOTARY,
             self.NODE,
+            self.FINANCE_CONTRACTS_CORDAPP,
+            self.FINANCE_WORKFLOWS_CORDAPP,
             self.CORDA_SHELL,
             self.PKI,
             self.SIGNER,
+            self.SIGNER_CA_PLUGIN,
+            self.SIGNER_NONCA_PLUGIN,
             self.ZONE
         ]
+
+    def _get_node_manager(self) -> NodeManager:
+        return NodeManager(self.NODE, self.node_count)
 
     def get_service(self, name: str) -> BaseService:
         for service in self._get_all_services():
@@ -238,32 +297,70 @@ class ServiceManager:
                 return service
         raise ValueError(f'No service with name {name}')
 
-    def get_deployment_services(self) -> List[DeploymentService]:
+    def get_deployment_services(self, pure_cenm: bool = False) -> List[DeploymentService]:
         """These services are returned in order they should be deployed
 
-        For default deployments, don't change the order
+        For default deployments: do not change the order
         
         """
-        return [
-            self.IDMAN,
-            self.SIGNER,
-            self.NOTARY,
-            self.NMAP,
-            self.AUTH,
-            self.GATEWAY,
-            self.ZONE
-        ]
+        if pure_cenm:
+            return [
+                self.IDMAN,
+                self.SIGNER,
+                self.NMAP,
+                self.AUTH,
+                self.GATEWAY,
+                self.ZONE
+            ]
+        else:
+            return [
+                self.IDMAN,
+                self.SIGNER,
+                self.NOTARY,
+                self.NMAP,
+                self.AUTH,
+                self.GATEWAY,
+                self.ZONE
+            ]
 
     def get_database_services(self) -> List[BaseService]:
         return [service for service in self._get_all_services() if service.abb in self.db_services]
 
+    def _raise_exception_group(self, errors: Dict[Tuple[str, str], Any]):
+        if any(errors.values()):
+            exceptions = []
+            for (service, dir), error in errors.items():
+                if error:
+                    exceptions.append(ServiceError(service, dir))
+            print("There were service that were not found, check the logs")
+            raise ExceptionGroup("Combined service exceptions", exceptions)
+
     def download_all(self):
         download_errors = {}
         for service in self._get_all_services():
-            download_errors[service.artifact_name] = service.download()
+            download_errors[(f'{service.artifact_name}-{service.version}', service.dir)] = service.download()
 
         download_errors_db = self.db_manager.download()
-        self.printer.print_end_of_script_report(download_errors, download_errors_db)
+        # self.printer.print_end_of_script_report(download_errors, download_errors_db)
+
+        # self._raise_exception_group(download_errors)
+        # self._raise_exception_group(download_errors_db)
+        self.check_all()
+
+    def check_all(self):
+        check_errors = {}
+        print("Validating services")
+        for service in self._get_all_services():
+            # self.logger.info(f'validating {service.artifact_name} config')
+            if (not service._check_presence()):
+                check_errors[(f'{service.artifact_name}-{service.version}', service.dir)] = service.dir
+                print(u'[\u274c] ' + f'{service.artifact_name}-{service.version}')
+            else:
+                print(u'[\u2705] ' + f'{service.artifact_name}-{service.version}')
+        self._raise_exception_group(check_errors)
+        print("Validating complete")
+        # else:
+            # self.printer.print_end_of_check_report(check_errors)
 
     def download_specific(self, services: List[str]):
         print("Downloading individual artifacts does not work with any other arguments, script will exit after downloading.")
@@ -271,38 +368,60 @@ class ServiceManager:
         for service in services:
             try:
                 service = self.get_service(service)
-                download_errors[service.artifact_name] = service.download()
+                download_errors[(f'{service.artifact_name}-{service.version}', service.dir)] = service.download()
             except ValueError as e:
                 print(e)
                 download_errors[service] = str(e)
         download_errors_db = self.db_manager.download()
-        self.printer.print_end_of_script_report(download_errors, download_errors_db)
+        # self.printer.print_end_of_script_report(download_errors, download_errors_db)
+
+        # self._raise_exception_group(download_errors)
+        # self._raise_exception_group(download_errors_db)
+        self.check_all()
 
     def deploy_all(self, health_check_frequency: int):
-        self.config_manager.validate_services(self.get_deployment_services())
+        self.check_all()
+        self.config_manager.validate(self.get_deployment_services())
+        self.PKI.validate_certificates(self.get_deployment_services(pure_cenm=True))
         self.deployment_manager.deploy_services(health_check_frequency)
 
+    def deploy_nodes(self, health_check_frequency: int):
+        node_manager = self._get_node_manager()
+        self.config_manager.validate(node_manager.new_nodes)
+        node_manager.deploy_nodes(health_check_frequency)
+
     def generate_certificates(self):
-        self.config_manager.validate_services([*self.get_deployment_services(), self.NODE, self.PKI])
+        self.check_all()
+        self.config_manager.validate([*self.get_deployment_services(), self.NODE, self.PKI])
         self.PKI.deploy()
 
     def clean_all(self,
         clean_deep: bool,
         clean_artifacts: bool,
         clean_certs: bool,
-        clean_runtime: bool
+        clean_runtime: bool,
+        clean_nodes: bool
     ):
-        self.sysi.remove(".logs/*", silent=True)
-        for service in [*self.get_deployment_services(), self.NODE, self.PKI]:
-            if clean_deep:
-                service.clean_all()
-                continue
-            if clean_artifacts:
-                service.clean_artifacts()
-            if clean_certs:
-                service.clean_certificates()
-            if clean_runtime:
-                service.clean_runtime()
+        if clean_nodes:
+            node_manager = self._get_node_manager()
+            node_manager.clean_deployment_nodes(
+                clean_deep,
+                clean_artifacts,
+                clean_certs,
+                clean_runtime
+            )
+        else:
+            self.sysi.remove(".logs/*", silent=True)
+            for service in [*self.get_deployment_services(), self.NODE, self.PKI]:
+                if clean_deep:
+                    service.clean_all()
+                    continue
+                if clean_artifacts:
+                    service.clean_artifacts()
+                if clean_certs:
+                    service.clean_certificates()
+                if clean_runtime:
+                    service.clean_runtime()
 
     def clean_specific_artifacts(self, services: List[str]):
         print("Cleaning individual artifacts does not work with any other arguments, script will exit after downloading.")

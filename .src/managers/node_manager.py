@@ -2,65 +2,72 @@ import glob
 import multiprocessing
 from typing import List, Dict
 from time import sleep
-from utils import Logger, SystemInteract, CenmTool
-from services.base_services import DeploymentService
+from utils import Logger, SystemInteract
+from services.base_services import NodeDeploymentService
 
-class DeploymentManager:
-    """Deployment manager for handling a standard CENM deployment.
+class NodeCountMismatchException(Exception):
+    def __init__(self):
+        super().__init__("Node count specified doesn't match the given number")
+
+class NodeManager:
+    """Deployment manager for handling a node deployments within CENM.
 
     Args:
         services:
             A list of services to deploy.
 
     """
-
-    def __init__(self, services: List[DeploymentService]):
-        self.deployment_services = {s.artifact_name: s for s in services}
-        self.functions = {s.artifact_name: s.deploy for s in services}
+    def __init__(self, node: NodeDeploymentService, node_count: int):
+        self.base_node = node
+        self.node_count = node_count
+        self.new_nodes = self._create_deployment_nodes()
+        self.deployment_nodes = {f'{s.artifact_name}{i}': s for i, s in enumerate(self.new_nodes, 1)}
+        self.functions = {f'{s.artifact_name}{i}': s.deploy for i, s in enumerate(self.new_nodes, 1)}
         self.processes = []
         self.versions = self._get_version_dict()
         self.logger = Logger().get_logger(__name__)
         self.sysi = SystemInteract()
-    
-    def _run_subzone_setup(self) -> bool:
-        return all(service in self.deployment_services.keys() for service in ["accounts-application", "gateway-service", "zone"]) and (not self._node_info())
+
+    def _create_deployment_nodes(self) -> List[NodeDeploymentService]:
+        existing_nodes = glob.glob("cenm-node-*")
+        if len(existing_nodes) > 0 and self.node_count == 0:
+            return [self.base_node._copy(new_dir=f'node-{i}') for i in range(1, len(existing_nodes)+1)]
+        else:
+            if len(existing_nodes) > 0 and self.node_count > 0 and len(existing_nodes) != self.node_count:
+                raise NodeCountMismatchException()
+            else:
+                return [self.base_node._copy(new_dir=f'node-{i}') for i in range(1, self.node_count+1)]
+
+    def _all_nodes(self) -> List[NodeDeploymentService]:
+        return [self.base_node, *self.new_nodes]
+
+    def clean_deployment_nodes(self,
+        clean_deep: bool,
+        clean_artifacts: bool,
+        clean_certs: bool,
+        clean_runtime: bool
+    ):
+        for node in self.new_nodes:
+            if clean_deep:
+                node.clean_all()
+                self.sysi.remove(node.dir)
+                continue
+            if clean_artifacts:
+                node.clean_artifacts()
+            if clean_certs:
+                node.clean_certificates()
+            if clean_runtime:
+                node.clean_runtime()
 
     def _get_version_dict(self) -> Dict[str, str]:
         with open(".env", 'r') as f:
             args = {key:value for (key,value) in [x.strip().split('=') for x in f.readlines()]}
         return args
 
-    def _node_info(self) -> bool:
-        return glob.glob(f'cenm-nmap/nodeInfo-*') and glob.glob(f'cenm-notary/nodeInfo*')
-    
-    def _setup_auth(self):
-        self.logger.info("Running initial setupAuth.sh")
-        self.sysi.run("(cd cenm-auth/setup-auth && bash setupAuth.sh)")
-
-        cenm_tool = CenmTool(self.versions['NMS_VISUAL_VERSION'])
-
-        while not self._node_info():
-            self.logger.info("Waiting for nodeInfo files to be created")
-            sleep(5)
-        self.logger.info("Waiting for network parameters to be signed")
-        tokens = cenm_tool.cenm_subzone_deployment_init()
-        self.logger.info(f"Subzone tokens: {tokens}")
-
-        zones = cenm_tool.get_subzones()
-
-        if len(zones) > 0:
-            self.logger.info(f"Subzones: {zones}, will only set permissions for {zones[0]}")
-            self.sysi.run(f'(cd cenm-auth/setup-auth/roles && for file in *.json; do perl -i -pe "s/<SUBZONE_ID>/{zones[0]}/g" $file; done)')
-            self.logger.info("Running setupAuth.sh with updated zone permissions")
-            self.sysi.run("(cd cenm-auth/setup-auth && bash setupAuth.sh)")
-            self.logger.info("Setting subzone config")
-            token = cenm_tool.cenm_set_subzone_config(zones[0])
-            self.logger.info(f"Subzone network map token: {token}")
-
     def _wait_for_service_termination(self):
             def _get_processes() -> int:
                 return int(self.sysi.run_get_stdout(
-                    'ps | grep -E ".*(cd cenm-.+\&\& java -jar).+(\.jar).+(\.conf).*" | wc -l | sed -e "s/^ *//g"'
+                    'ps | grep -E ".*(cd cenm-node-.+\&\& java -jar).+(\.jar).+(\.conf).*" | wc -l | sed -e "s/^ *//g"'
                 ))
 
             java_processes = _get_processes()
@@ -69,28 +76,22 @@ class DeploymentManager:
                 sleep(5)
                 java_processes = _get_processes()
 
-    def deploy_services(self, health_check_frequency: int):
-        """Deploy services in a standard CENM deployment.
+    def deploy_nodes(self, health_check_frequency: int):
+        """Deploy nodes in a standard CENM deployment.
         
         """
         try:
-            self.run_subzone_setup = self._run_subzone_setup()
-            self.logger.info("Starting the cenm deployment")
+            self.logger.info("Starting the node deployment")
             service_deployments = '\n'.join([f'{service}: {service_info}' for service, service_info in self.functions.items()])
             self.logger.info(f'Deploying:\n\n{service_deployments}\n')
             for service, function in self.functions.items():
-                service_object = self.deployment_services[service]
+                service_object = self.deployment_nodes[service]
                 self.logger.info(f'attempting to deploy {service}')
                 process = multiprocessing.Process(target=function, name=service, daemon=True)
                 self.processes.append(process)
                 process.start()
                 self.logger.info(f'deployed {service} waiting {service_object.deployment_time} seconds until next service')
                 sleep(service_object.deployment_time)
-
-            if self.run_subzone_setup:
-                self.logger.info('All services deployed, setting up subzones')
-                self._setup_auth()
-                self.logger.info('Subzones setup, starting health check')
             
             while True:
                 self.logger.info('Running process health check')

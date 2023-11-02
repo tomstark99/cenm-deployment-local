@@ -4,6 +4,7 @@ from enum import Enum
 from typing import List, Dict
 import warnings
 import functools
+import uuid
 
 def deprecated(func):
     """This is a decorator which can be used to mark functions
@@ -26,7 +27,8 @@ class Constants(Enum):
     GITHUB_URL = 'https://github.com/tomstark99'
     EXT_PACKAGE = 'extensions-lib-release-local/com/r3/appeng'
     ENM_PACKAGE = 'r3-enterprise-network-manager/com/r3/enm'
-    CORDA_PACKAGE = 'corda-releases/net/corda'
+    CORDA_PACKAGE = 'r3-corda-releases/com/r3/corda'
+    CORDAPP_PACKAGE = 'corda-releases/net/corda'
 
     MSSQL_DRIVER = 'https://repo1.maven.org/maven2/com/microsoft/sqlserver/mssql-jdbc/8.2.2.jre8/mssql-jdbc-8.2.2.jre8.jar'
     POSTGRES_DRIVER = 'https://repo1.maven.org/maven2/org/postgresql/postgresql/42.5.2/postgresql-42.5.2.jar'
@@ -47,7 +49,7 @@ class Constants(Enum):
     GATEWAY_DEPLOY_TIME = 5
     ZONE_DEPLOY_TIME = 10
 
-    NODE_DEPLOY_TIME = 60
+    NODE_DEPLOY_TIME = 70
     
 
 class Logger:
@@ -104,6 +106,9 @@ class Logger:
 
 class Printer:
     """Printer for standard printing
+
+    Deprecated class: use ExceptionGroup in favour.
+    other print statements can be done inline in class
 
     """
     def __init__(self,
@@ -171,6 +176,20 @@ End of script report
         else:
             print("All database drivers downloaded successfully.")
 
+    @deprecated
+    def print_end_of_check_report(self, check_errors):
+        print("""
+End of validation report
+=====================================
+        """)
+        if any(check_errors.values()):
+            print("The following errors were encountered when validating artifacts:")
+            for artifact_name, error in check_errors.items():
+                if error:
+                    print(f'Failed to validate {artifact_name}, artifact not found.')
+        else:
+            print("All artifacts validated successfully.")
+
 class SystemInteract:
     """Class for using system commands
 
@@ -180,6 +199,12 @@ class SystemInteract:
 
     def sleep(self, seconds):
         os.system(f'sleep {seconds}')
+
+    def perl(self, file, predicate, replace, multi_line: bool = False):
+        if multi_line:
+            os.system(f'perl -0777 -i -pe "s/{predicate}/{replace}/" {file}')
+        else:
+            os.system(f'perl -i -pe "s/{predicate}/{replace}/" {file}')
 
     def remove(self, path, silent: bool = False):
         if silent:
@@ -197,10 +222,14 @@ class SystemInteract:
             return os.system(cmd)
 
     def run_get_stdout(self, cmd) -> str:
-        os.system(f'{cmd} > .tmp')
-        with open('.tmp', 'r') as f:
-            out = f.read()
-        os.system('rm .tmp')
+        unique_file = f'.tmp-{uuid.uuid4().hex}'
+        os.system(f'{cmd} > {unique_file}')
+        try:
+            with open(unique_file, 'r') as f:
+                out = f.read()
+            self.remove(unique_file, silent=True)
+        except:
+            out = 'E: Could not read stdout'
         return out
 
 class CenmTool:
@@ -218,6 +247,7 @@ class CenmTool:
         self.sysi = SystemInteract()
 
     def _run(self, cmd: str):
+        print(f'Running: {cmd}')
         return self.sysi.run_get_stdout(f'(cd {self.path} && java -jar {self.jar} {cmd})')
 
     def _login(self, username: str, password: str):
@@ -238,15 +268,22 @@ class CenmTool:
         self._logout()
         return token
 
-    def set_config(self, service: str, config_file: str) -> str:
+    def set_config(self, service: str, config_file: str, subzone: str = None) -> str:
         self._login('config-maintainer', 'p4ssWord')
-        token = self._run(f'{service} config set -f={config_file} --zone-token')
+        if subzone:
+            token = self._run(f'{service} config set -s {subzone} -f={config_file} --zone-token')
+        else:
+            token = self._run(f'{service} config set -f={config_file} --zone-token')
         self._logout()
         return token
 
-    def set_admin_address(self, service: str, address: str):
+    def set_admin_address(self, service: str, address: str, subzone: str = None):
         self._login('config-maintainer', 'p4ssWord')
-        self._run(f'{service} config set-admin-address -a={address}')
+        # You can only specify sub_zone for netmap
+        if subzone and service == "netmap":
+            self._run(f'{service} config set-admin-address -s {subzone} -a={address}')
+        else:
+            self._run(f'{service} config set-admin-address -a={address}')
         self._logout()
 
     def get_subzones(self) -> List[str]:
@@ -258,13 +295,28 @@ class CenmTool:
 
     def cenm_subzone_deployment_init(self) -> Dict[str, str]:
         tokens = {}
+
+        self.set_admin_address('identity-manager', 'localhost:5053')
+        # print(self.sysi.run_get_stdout(f'(cd {self.path} && cat ../../cenm-idman/identitymanager.conf)'))
+        tokens['idman'] = self.set_config('identity-manager', '../../cenm-idman/identitymanager.conf')
+        
+        self.set_admin_address('netmap', 'localhost:5055')
+        # print(self.sysi.run_get_stdout(f'(cd {self.path} && cat ../../cenm-nmap/networkparameters.conf)'))
         tokens['nmap'] = self.create_zone(
             config_file='../../cenm-nmap/networkmap.conf',
-            network_map_address='127.0.0.1:20000',
+            network_map_address='localhost:20000',
             network_parameters='../../cenm-nmap/networkparameters.conf',
             label='Main',
             label_color='#941213'
         )
-        tokens['idman'] = self.set_config('identity-manager', '../../cenm-idman/identitymanager.conf')
+        self.set_admin_address('signer', 'localhost:5054')
+        # print(self.sysi.run_get_stdout(f'(cd {self.path} && cat ../../cenm-signer/signer.conf)'))
         tokens['signer'] = self.set_config('signer', '../../cenm-signer/signer.conf')
         return tokens
+
+    def cenm_set_subzone_config(self, subzone: str) -> str:
+        # necessary step?
+        self.set_admin_address('identity-manager', 'localhost:5053', subzone=subzone)
+        self.set_admin_address('netmap', 'localhost:5055', subzone=subzone)
+
+        return self.set_config('netmap', '../../cenm-nmap/networkmap.conf', subzone=subzone)

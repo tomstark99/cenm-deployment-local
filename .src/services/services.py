@@ -1,12 +1,11 @@
 from pyhocon import ConfigFactory
-from services.base_services import BaseService, DeploymentService, NodeDeploymentService
+from services.base_services import BaseService, SignerPluginService, CordappService, DeploymentService, NodeDeploymentService
 from managers.certificate_manager import CertificateManager
-from utils import Constants
+from typing import List
 from time import sleep
 import glob
 import os
-import threading
-
+import re
 
 class AuthService(DeploymentService):
 
@@ -63,6 +62,11 @@ class GatewayService(DeploymentService):
         self._handle_gateway()
         return self.error
 
+    def _get_cert_count(self) -> bool:
+        cert_count_1 = self.sysi.run_get_stdout(f"ls {self.dir}/private/certificates | xargs | wc -w | sed -e 's/^ *//g'")
+        cert_count_2 = self.sysi.run_get_stdout(f"ls {self.dir}/public/certificates | xargs | wc -w | sed -e 's/^ *//g'")
+        return int(cert_count_1) + int(cert_count_2)
+
     def deploy(self):
         self.logger.info(f'Thread started to deploy {self.artifact_name}')
         artifact_name = f'{self.artifact_name}-{self.version}'
@@ -74,6 +78,20 @@ class GatewayService(DeploymentService):
                     raise RuntimeError(f'{self.artifact_name} service stopped')
             except:
                 self.logger.warning(f'{self.artifact_name} service stopped. Restarting...')
+
+    def validate_config(self) -> str:
+        try:
+            ConfigFactory.parse_file(f'{self.dir}/private/{self.config_file}')
+            ConfigFactory.parse_file(f'{self.dir}/public/{self.config_file}')
+            return ""
+        except Exception as e:
+            return str(e)
+
+    def validate_certs(self) -> str:
+        if self._get_cert_count() < self.certificates:
+            return f'Certificate mismatch ({self._get_cert_count()} found, {self.certificates} expected)'
+        else:
+            return ""
 
 class GatewayPluginService(BaseService):
 
@@ -125,9 +143,10 @@ class IdentityManagerService(DeploymentService):
 class CrrToolService(BaseService):
 
     def _check_presence(self) -> bool:
-        for _, _, files in os.walk(self.dir):
+        for _, _, files in os.walk(f'{self.dir}/tools/{self.artifact_name}'):
             if 'crrsubmissiontool.jar' in files:
-                print(f'crrsubmissiontool.jar already exists. Skipping download.')
+                # Temporarily muting this message
+                # print(f'crrsubmissiontool.jar already exists. Skipping.')
                 return True
         return False
 
@@ -184,10 +203,18 @@ class NetworkMapService(DeploymentService):
         super().deploy()
 
 class NotaryService(NodeDeploymentService):
-    pass
+    
+    def _move(self):
+        self.sysi.run(f'mv {self._zip_name()} {self.dir}/{self._zip_name()}')
+        if self.sysi.path_exists('cenm-node'):
+            self.sysi.run(f'mv {self._zip_name()} cenm-node/{self._zip_name()} > /dev/null 2>&1')
 
 class NodeService(NodeDeploymentService):
-    pass
+
+    def _move(self):
+        self.sysi.run(f'mv {self._zip_name()} {self.dir}/{self._zip_name()}')
+        if self.sysi.path_exists('cenm-notary'):
+            self.sysi.run(f'mv {self._zip_name()} cenm-notary/{self._zip_name()} > /dev/null 2>&1')
 
 class CordaShellService(BaseService):
 
@@ -205,13 +232,20 @@ class CordaShellService(BaseService):
         self.error = self.dlm.download(self.url)
         self._handle_corda_shell()
         return self.error
+    
+class FinanceContractsCordapp(CordappService):
+    pass
+
+class FinanceWorkflowsCordapp(CordappService):
+    pass
 
 class PkiToolService(DeploymentService):
 
     def _check_presence(self) -> bool:
         for _, _, files in os.walk(self.dir):
             if 'pkitool.jar' in files:
-                print(f'pkitool.jar already exists. Skipping download.')
+                # Temporarily muting this message
+                # print(f'pkitool.jar already exists. Skipping.')
                 return True
         return False
 
@@ -228,8 +262,36 @@ class PkiToolService(DeploymentService):
     def deploy(self):
         cert_manager = CertificateManager()
         exit_code = -1
-        while exit_code != 0:
-            exit_code = cert_manager.generate()
+        try:
+            while exit_code != 0:
+                exit_code = cert_manager.generate()
+        except KeyboardInterrupt:
+            print('Certificate generation cancelled')
+            exit(1)
+
+    def validate_certificates(self, services: List[DeploymentService]):
+        cert_manager = CertificateManager()
+        cert_manager.validate(services)
+
+    def validate_config(self) -> str:
+        try:
+            ConfigFactory.parse_file(f'{self.dir}/{self.config_file}')
+            return ""
+        except Exception as e:
+            """this HOCON parser doesn't like default pki config e.g.
+                 "::CORDA_SSL_NETWORK_MAP"
+            
+            This workaround finds the line number of the HOCON error and checks if the config option
+            on that line matches the above pattern, if so then it bypasses the parsing error.
+
+            """
+            line_number = (int(re.search(r'line\:\d+',str(e)).group().split(':')[-1]) - 1)
+            with open(f'{self.dir}/{self.config_file}', 'r') as f:
+                pki_config_lines = f.readlines()
+            if re.match(r'.*(\,\n|\n)?.*\"\:\:\w+\"(\,\n|\n)?.*', ''.join(pki_config_lines[line_number-1:line_number+1])):
+                return ""
+            else:
+                return str(e)
 
     def clean_certificates(self):
         for root, dirs, files in os.walk(self.dir):
@@ -238,6 +300,12 @@ class PkiToolService(DeploymentService):
                     self.sysi.remove(os.path.join(root, dir))
 
 class SignerService(DeploymentService):
+    pass
+
+class SignerPluginNonCAService(SignerPluginService):
+    pass
+
+class SignerPluginCAService(SignerPluginService):
     pass
 
 class ZoneService(DeploymentService):
@@ -251,3 +319,6 @@ class ZoneService(DeploymentService):
                     raise RuntimeError(f'{self.artifact_name} service stopped')
             except:
                 self.logger.warning(f'{self.artifact_name} service stopped. Restarting...')
+    
+    def validate_config(self) -> str:
+        return ""

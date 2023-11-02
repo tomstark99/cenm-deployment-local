@@ -1,4 +1,5 @@
 import os
+from utils import deprecated, SystemInteract
 
 class DownloadManager:
     """Download manager for interacting with wget or curl.
@@ -17,16 +18,33 @@ class DownloadManager:
     ):
         self.username = username
         self.password = password
-        self.wget = self._is_wget_installed()
+        self.wget = False #self._is_wget_installed()
+        self.sysi = SystemInteract()
 
+    @deprecated
     def _is_wget_installed(self) -> bool:
         """Checks if wget is installed on host machine.
 
         Returns:
             True installed False if not.
 
+        Deprecating use of wget in favor of curl
         """
         return os.system('wget --version > /dev/null 2>&1') == 0
+
+    def _get_md5sum(self, url: str) -> str:
+        return self.sysi.run_get_stdout(f'curl -L --progress-bar -u {self.username}:{self.password} {url} | md5sum | cut -d " " -f 1')
+
+    def validate_download(self, url: str) -> bool:
+        """Check the md5sum of the downloaded file against the one that would be downloaded
+
+        TODO: currently this doesn't work due to item location not being in the root where the script is
+        there is a file not found error.
+        
+        """
+        artifact = url.split("/")[-1]
+        print(f'Validating {artifact}')
+        return self.sysi.run_get_stdout(f'md5sum {artifact} | cut -d " " -f 1') != self._get_md5sum(url)
 
     def download(self, url: str) -> bool:
         """Download a file from a given url using wget or curl.

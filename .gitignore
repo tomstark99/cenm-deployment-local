@@ -9,3 +9,7 @@ cenm-*/
 
 # logs
 .logs/*
+
+# misc artifacts
+*.jar
+*.zip

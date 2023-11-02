@@ -68,9 +68,10 @@ class DatabaseManager:
 
         for driver, exists in exists_dict.items():
             if not all(exists.values()):
-                download_errors[self._get_jar_name(driver)] = self.dlm.download(driver)
-            else:
-                print(f'{self._get_jar_name(driver)} already exists. Skipping download.')
+                print(f'Downloading {self._get_jar_name(driver)}')
+                download_errors[(self._get_jar_name(driver), '')] = self.dlm.download(driver)
+            # else:
+                # print(f'{self._get_jar_name(driver)} already exists. Skipping download.')
 
         self._distribute_drivers(exists_dict)
         return download_errors

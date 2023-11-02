@@ -4,7 +4,7 @@ from pyhocon import ConfigFactory
 from managers.download_manager import DownloadManager
 from utils import SystemInteract, Logger, Constants
 import glob
-import logging
+import uuid
 
 class BaseService(ABC):
     """Base service for all services to inherit.
@@ -71,7 +71,8 @@ class BaseService(ABC):
     def _check_presence(self) -> bool:
         for _, _, files in os.walk(self.dir):
             if f'{self.artifact_name}.jar' in files or f'{self.artifact_name}-{self.version}.jar' in files:
-                print(f'{self.artifact_name} already exists. Skipping download.')
+                # Temporarily muting this message
+                # print(f'{self.artifact_name}-{self.version} already exists. Skipping.')
                 return True
         return False
     
@@ -83,13 +84,45 @@ class BaseService(ABC):
     def download(self) -> bool:
         self._clone_repo()
         if self._check_presence():
-            return
+            return #self.dlm.validate_download(self.url)
         # If artifact not present then download it
         print(f'Downloading {self._zip_name()}')
         self.error = self.dlm.download(self.url)
         self._move()
         return self.error
     
+class SignerPluginService(BaseService):
+
+    def _handle_plugin(self):
+        if not self.sysi.path_exists(f'{self.dir}/plugins'):
+            self.sysi.run(f'mkdir {self.dir}/plugins')
+        self.sysi.run(f'mv {self._zip_name()} {self.dir}/plugins')
+
+    def download(self) -> bool:
+        if self._check_presence():
+            return
+        # If artifact not present then download it
+        print(f'Downloading {self._zip_name()}')
+        self.error = self.dlm.download(self.url)
+        self._handle_plugin()
+        return self.error
+
+class CordappService(BaseService):
+
+    def _handle_cordapp(self):
+        if not self.sysi.path_exists(f'{self.dir}/cordapps'):
+            self.sysi.run(f'mkdir {self.dir}/cordapps')
+        self.sysi.run(f'mv {self._zip_name()} {self.dir}/cordapps')
+    
+    def download(self) -> bool:
+        if self._check_presence():
+            return
+        # If artifact not present then download it
+        print(f'Downloading {self._zip_name()}')
+        self.error = self.dlm.download(self.url)
+        self._handle_cordapp()
+        return self.error
+
 class DeploymentService(BaseService):
     """Base service for the the services that also can be deployed
 
@@ -114,7 +147,8 @@ class DeploymentService(BaseService):
         username: str,
         password: str,
         config_file: str,
-        deployment_time: int
+        deployment_time: int,
+        certificates: int = None
     ):
         super().__init__(
             abb, 
@@ -131,12 +165,17 @@ class DeploymentService(BaseService):
         self.runtime_files = Constants.RUNTIME_FILES.value
         self.config_file = config_file
         self.deployment_time = deployment_time
+        self.certificates = certificates
 
     def __str__(self) -> str:
         return f"DeploymentService[{self.abb}, {self.dir}, {self.artifact_name}, {self.ext}, {self.version}]"
 
     def __repr__(self):
         return self.__str__()
+
+    def _get_cert_count(self) -> bool:
+        cert_count = self.sysi.run_get_stdout(f"ls {self.dir}/certificates | xargs | wc -w | sed -e 's/^ *//g'")
+        return int(cert_count)
         
     def deploy(self):
         self.logger.info(f'Thread started to deploy {self.artifact_name}')
@@ -149,12 +188,18 @@ class DeploymentService(BaseService):
             except:
                 self.logger.warning(f'{self.artifact_name} service stopped. Restarting...')
 
-    def validate(self) -> str:
+    def validate_config(self) -> str:
         try:
-            config = ConfigFactory.parse_file(f'{self.dir}/{self.config_file}')
+            ConfigFactory.parse_file(f'{self.dir}/{self.config_file}')
             return ""
         except Exception as e:
             return str(e)
+
+    def validate_certs(self) -> str:
+        if self._get_cert_count() < self.certificates:
+            return f'Certificate mismatch ({self._get_cert_count()} found, {self.certificates} expected)'
+        else:
+            return ""
 
     def clean_runtime(self):
         for root, dirs, files in os.walk(self.dir):
@@ -189,15 +234,45 @@ class NodeDeploymentService(DeploymentService):
     def __repr__(self):
         return self.__str__()
 
+    def _construct_new_node_dir(self, new_dir):
+        self.sysi.run(f'cp -r {self.dir} cenm-{new_dir}')
+        node_number = new_dir.split("-")[-1]
+        perl_dir = f'cenm-{new_dir}/node.conf'
+        node_uuid = uuid.uuid4().hex[:5]
+        self.sysi.perl(perl_dir, 'myLegalName.*O\\=\\K.*(?=, L\\=.*)', f'TestNode{node_number}-{node_uuid}')
+        self.sysi.perl(perl_dir, 'p2pAddress.*:\\K.*(?=\\"\\\n)', f'60{node_number}11')
+        self.sysi.perl(perl_dir, '^\\s*address.*:\\K.*(?=\\"\\\n)', f'60{node_number}12')
+        self.sysi.perl(perl_dir, '^\\s*adminAddress.*:\\K.*(?=\\"\\\n)', f'60{node_number}13')
+        self.sysi.perl(perl_dir, '^\\s*port \\= \\K.*(?=\\\n)', f'223{node_number}')
+
+    def _copy(self, new_dir):
+        new_node = NodeDeploymentService(
+            abb=self.abb,
+            dir=new_dir,
+            artifact_name=self.artifact_name,
+            version=self.version,
+            ext=self.ext,
+            url=self.url,
+            username=self.dlm.username,
+            password=self.dlm.password,
+            config_file=self.config_file,
+            deployment_time=self.deployment_time,
+            certificates=self.certificates
+        )
+        if not self.sysi.path_exists(f'cenm-{new_dir}'):
+            self._construct_new_node_dir(new_dir)
+            new_node.download()
+        return new_node
+
     def _is_registered(self) -> bool:
-        return glob.glob(f'cenm-notary/nodeInfo-*')
+        return glob.glob(f'{self.dir}/nodeInfo-*')
 
     def _register_node(self, artifact_name):
         self.logger.info('Registering node to the network')
         exit_code = -1
         while exit_code != 0:
-            self.logger.debug(f'[Running] (cd {self.dir} && java -jar {artifact_name}.jar -f {self.config_file} --initial-registration --network-root-truststore ./certificates/network-root-truststore.jks --network-root-truststore-password trustpass) to start {self.artifact_name} service')
-            exit_code = self.sysi.run_get_exit_code(f'(cd {self.dir} && java -jar {artifact_name}.jar -f {self.config_file} --initial-registration --network-root-truststore ./certificates/network-root-truststore.jks --network-root-truststore-password trustpass)')
+            self.logger.debug(f'[Running] (cd {self.dir} && java -jar {artifact_name}.jar initial-registration --network-root-truststore ./certificates/network-root-truststore.jks --network-root-truststore-password trustpass -f {self.config_file}) to start {self.artifact_name} service')
+            exit_code = self.sysi.run_get_exit_code(f'(cd {self.dir} && java -jar {artifact_name}.jar initial-registration --network-root-truststore ./certificates/network-root-truststore.jks --network-root-truststore-password trustpass -f {self.config_file})')
         self.logger.info(f'Sleeping for 2 minutes to allow registration to complete and for network parameters to be signed')
         self.sysi.sleep(120)
 
