@@ -312,6 +312,7 @@ class CenmTool:
         self.set_admin_address('signer', 'localhost:5054')
         # print(self.sysi.run_get_stdout(f'(cd {self.path} && cat ../../cenm-signer/signer.conf)'))
         tokens['signer'] = self.set_config('signer', '../../cenm-signer/signer.conf')
+        return tokens
 
     def cenm_set_subzone_config(self, subzone: str) -> str:
         # necessary step?
