@@ -23,7 +23,7 @@ You then skip to the [Deployment Order](#deployment-order) section
 1. Clone this repo locally:
 
     ```shell
-    git clone --branch=dev/tom https://github.com/tomstark99/cenm-deployment-local.git
+    git clone --branch=release/1.5 https://github.com/tomstark99/cenm-deployment-local.git
     ```
 
 2. Copy and rename the `.env.template` file to `.env`, here you will fill in your credentials
