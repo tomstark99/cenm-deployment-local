@@ -303,7 +303,7 @@ class CenmTool:
         # print(self.sysi.run_get_stdout(f'(cd {self.path} && cat ../../cenm-idman/identitymanager.conf)'))
         tokens['idman'] = self.set_config('identity-manager', '../../cenm-idman/identitymanager.conf')
         
-        self.set_admin_address('netmap', 'localhost:5055')
+        # no need to set admin address for nmap (can only do that with subzone)
         # print(self.sysi.run_get_stdout(f'(cd {self.path} && cat ../../cenm-nmap/networkparameters.conf)'))
         tokens['nmap'] = self.create_zone(
             config_file='../../cenm-nmap/networkmap.conf',
