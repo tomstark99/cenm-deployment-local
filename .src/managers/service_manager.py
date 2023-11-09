@@ -168,7 +168,8 @@ class ServiceManager:
             username=       username,
             password=       password,
             config_file=    'notary.conf',
-            deployment_time=Constants.NODE_DEPLOY_TIME.value)
+            deployment_time=Constants.NODE_DEPLOY_TIME.value,
+            certificates=   1)
         self.NODE = NodeService(
             abb=            'node',
             dir=            'node',
@@ -179,7 +180,8 @@ class ServiceManager:
             username=       username,
             password=       password,
             config_file=    'node.conf',
-            deployment_time=Constants.NODE_DEPLOY_TIME.value)
+            deployment_time=Constants.NODE_DEPLOY_TIME.value,
+            certificates=   1)
         self.FINANCE_CONTRACTS_CORDAPP = FinanceContractsCordapp(
             abb=            'finance-contracts',
             dir=            'node',
@@ -361,6 +363,11 @@ class ServiceManager:
         print("Validating complete")
         # else:
             # self.printer.print_end_of_check_report(check_errors)
+
+    def validate(self, pure_cenm: bool = False):
+        self.check_all()
+        self.config_manager.validate(self.get_deployment_services(pure_cenm=pure_cenm))
+        self.PKI.validate_certificates(self.get_deployment_services(pure_cenm=pure_cenm))
 
     def download_specific(self, services: List[str]):
         print("Downloading individual artifacts does not work with any other arguments, script will exit after downloading.")

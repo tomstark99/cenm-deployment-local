@@ -204,7 +204,7 @@ def main(args: argparse.Namespace):
     )
 
     if args.validate:
-        service_manager.check_all()
+        service_manager.validate()
 
     if args.setup_dir_structure:
         service_manager.download_all()
