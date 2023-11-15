@@ -5,6 +5,7 @@ from typing import List, Dict
 import warnings
 import functools
 import uuid
+import glob
 
 def deprecated(func):
     """This is a decorator which can be used to mark functions
@@ -25,6 +26,8 @@ def deprecated(func):
 class Constants(Enum):
     BASE_URL = 'https://software.r3.com/artifactory'
     GITHUB_URL = 'https://github.com/tomstark99'
+    ARTEMIS_URL = 'https://archive.apache.org/dist/activemq/activemq-artemis'
+    ARTEMIS_VERSION = '2.6.3'
     EXT_PACKAGE = 'extensions-lib-release-local/com/r3/appeng'
     ENM_PACKAGE = 'r3-enterprise-network-manager/com/r3/enm'
     CORDA_PACKAGE = 'r3-corda-releases/com/r3/corda'
@@ -38,8 +41,12 @@ class Constants(Enum):
     DB_SERVICES = ['auth', 'idman', 'nmap', 'notary', 'node', 'zone']
 
     RUNTIME_FILES = {
-        'dirs': ["logs", "h2", "ssh", "shell-commands", "djvm", "artemis", "brokers", "additional-node-infos"],
-        'notary_files': ["process-id", "network-parameters", "nodekeystore.jks", "truststore.jks", "sslkeystore.jks", "certificate-request-id.txt"]
+        'dirs': ["logs", "h2", "ssh", "shell-commands", "djvm", "brokers", "additional-node-infos"],
+        'notary_files': ["process-id", "network-parameters", "nodekeystore.jks", "truststore.jks", "sslkeystore.jks", "certificate-request-id.txt"],
+        'firewall_files': ['network-parameters', 'nodesUnitedSslKeystore.jks', 'firewall-process-id'],
+        'firewall_dirs': ['logs'],
+        'artemis': ['artemis-master'],
+        'ha-tools': ['nodesUnitedSslKeystore.jks', 'ha-utilities.log']
     }
 
     IDMAN_DEPLOY_TIME = 10
@@ -49,7 +56,9 @@ class Constants(Enum):
     GATEWAY_DEPLOY_TIME = 5
     ZONE_DEPLOY_TIME = 10
 
-    NODE_DEPLOY_TIME = 70
+    NODE_DEPLOY_TIME = 60
+    FIREWALL_DEPLOY_TIME = 40
+    ARTEMIS_DEPLOY_TIME = 10
     
 
 class Logger:
@@ -145,51 +154,6 @@ Current Corda version:   {}
             self.corda_version
         ))
 
-    @deprecated
-    def print_deployment_complete(self):
-        print("""
-Deployment complete
-=====================================
-
-Deployment logs can be found under: .logs/default-deployment.log
-
-        """)
-
-    @deprecated
-    def print_end_of_script_report(self, download_errors, download_errors_db):
-        print("""
-End of script report
-=====================================
-        """)
-        if any(download_errors.values()):
-            print("The following errors were encountered when downloading artifacts:")
-            for artifact_name, error in download_errors.items():
-                if error:
-                    print(f'Error encountered when downloading {artifact_name}, please check version and try again.')
-        else:
-            print("All artifacts downloaded successfully.")
-        if any(download_errors_db.values()):
-            print("The following errors were encountered when downloading database drivers:")
-            for artifact_name, error in download_errors_db.items():
-                if error:
-                    print(f'Error encountered when downloading {artifact_name}, please check version and try again.')
-        else:
-            print("All database drivers downloaded successfully.")
-
-    @deprecated
-    def print_end_of_check_report(self, check_errors):
-        print("""
-End of validation report
-=====================================
-        """)
-        if any(check_errors.values()):
-            print("The following errors were encountered when validating artifacts:")
-            for artifact_name, error in check_errors.items():
-                if error:
-                    print(f'Failed to validate {artifact_name}, artifact not found.')
-        else:
-            print("All artifacts validated successfully.")
-
 class SystemInteract:
     """Class for using system commands
 
@@ -205,6 +169,12 @@ class SystemInteract:
             os.system(f'perl -0777 -i -pe "s/{predicate}/{replace}/" {file}')
         else:
             os.system(f'perl -i -pe "s/{predicate}/{replace}/" {file}')
+
+    def copy(self, source, destination, silent: bool = False):
+        if silent:
+            os.system(f'cp {source} {destination} > /dev/null 2>&1')
+        else:
+            os.system(f'cp {source} {destination}')
 
     def remove(self, path, silent: bool = False):
         if silent:
@@ -234,6 +204,50 @@ class SystemInteract:
         except:
             out = 'E: Could not read stdout'
         return out
+
+class FirewallTool:
+
+    def __init__(self, artifact_name: str):
+        self.sysi = SystemInteract()
+        self.logger = Logger().get_logger(__name__)
+        self.artifact_name = artifact_name
+        self.nodes = glob.glob('cenm-node-*')
+
+    def _get_node_networkparameters(self):
+        self.logger.info('Getting network parameters')
+        node_dir = self.nodes[0]
+        self.logger.debug(f'[Running] timeout 30 bash -c "cd {node_dir} && java -jar {self.artifact_name}.jar -f node.conf" to get network parameters')
+        self.sysi.run(f'timeout 30 bash -c "cd {node_dir} && java -jar {self.artifact_name}.jar -f node.conf"')
+        self.logger.info('Terminated corda process that was started to get network parameters')
+    
+    def _wait_for_ssl_keys(self):
+        present = False
+        while not present:
+            self.logger.info('Waiting for ssl keys to be generated')
+            exists = [self.sysi.path_exists(f'{node_dir}/certificates/sslkeystore.jks') for node_dir in self.nodes]
+            present = all(exists)
+
+    def _import_ssl_key(self):
+        self.logger.info('Importing ssl key')
+        self._wait_for_ssl_keys()
+        cmd = f'java -jar corda-tools-ha-utilities.jar import-ssl-key --bridge-keystore-password=bridgeKeyStorePassword --bridge-keystore=./nodesCertificates/nodesUnitedSslKeystore.jks ' + ''.join([f'--node-keystores=../{node_dir}/certificates/sslkeystore.jks --node-keystore-passwords=cordacadevpass ' for node_dir in self.nodes])
+        self.logger.info(f'[Running] {cmd}')
+        self.sysi.run(f'cd corda-tools && {cmd}')
+    
+    def _copy_firewall_files(self):
+        node_dir = self.nodes[0]
+        self.logger.info(f"Copying firewall files for {node_dir}")
+        self.sysi.run(f'cp {node_dir}/network-parameters corda-bridge')
+        self.sysi.run(f'cp {node_dir}/network-parameters corda-float')
+        self.sysi.run(f'cp {node_dir}/certificates/network-root-truststore.jks corda-bridge/nodesCertificates')
+        self.sysi.run('cp corda-tools/nodesCertificates/nodesUnitedSslKeystore.jks corda-bridge/nodesCertificates')
+
+    def setup_firewall(self):
+        self.logger.info('Setting up firewall')
+        if not glob.glob('corda-float/network-parameters') and not glob.glob('corda-bridge/network-parameters'):
+            self._import_ssl_key()
+            self._get_node_networkparameters()
+            self._copy_firewall_files()
 
 class CenmTool:
     """Class for using cenm cli tool

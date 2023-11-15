@@ -74,6 +74,12 @@ parser.add_argument(
     help='Clean individual artifacts, use a comma separated string of artifacts to download e.g. "pki-tool,identitymanager" to clean the pki-tool and identitymanager artifacts'
 )
 parser.add_argument(
+    '--firewall', 
+    default=False, 
+    action='store_true', 
+    help='Include the corda firewall services in the given command'
+)
+parser.add_argument(
     '--health-check-frequency',
     type=int,
     default=30,
@@ -119,6 +125,9 @@ def validate_arguments(args: argparse.Namespace):
         raise ValueError("Cannot use more than one of the following flags: --clean-runtime, --deep-clean, --clean-artifacts, --clean-certs")
     if sum(clean_args) < 1 and args.nodes:
         raise ValueError("Can't specify --nodes without specifying what to clean")
+    firewall_args = [args.setup_dir_structure, (args.run_node_deployment != 0), args.validate, args.generate_certs, *clean_args]
+    if args.firewall and sum(firewall_args) != 1:
+        raise ValueError("Can not use --firewall with arguments provided")
     # Check if no other arguments are used with --download-individual
     all_args = [
         args.setup_dir_structure, 
@@ -130,13 +139,14 @@ def validate_arguments(args: argparse.Namespace):
         args.run_default_deployment, 
         args.run_node_deployment,
         args.nodes,
+        args.firewall,
         args.version, 
         (args.health_check_frequency != 30), 
         (not not args.download_individual),  
         (not not args.clean_individual_artifacts), 
         args.validate
     ]
-    if args.validate and sum(all_args) > 1:
+    if args.validate and not args.firewall and sum(all_args) > 1:
         raise ValueError("Cannot use --validate with any other flag")
     if args.download_individual and sum(all_args) > 1:
         raise ValueError("Cannot use --download-individual with any other flag")
@@ -200,23 +210,24 @@ def main(args: argparse.Namespace):
         args.clean_artifacts,
         args.clean_certs,
         args.clean_runtime,
-        args.nodes
+        args.nodes,
+        args.firewall
     )
 
     if args.validate:
-        service_manager.check_all()
+        service_manager.check_all(args.firewall)
 
     if args.setup_dir_structure:
-        service_manager.download_all()
+        service_manager.download_all(args.firewall)
 
     if args.generate_certs:
-        service_manager.generate_certificates()
+        service_manager.generate_certificates(args.firewall)
 
     if args.run_default_deployment:
         service_manager.deploy_all(args.health_check_frequency)
 
     if args.run_node_deployment:
-        service_manager.deploy_nodes(args.health_check_frequency)
+        service_manager.deploy_nodes(args.health_check_frequency, args.firewall)
 
 if __name__ == '__main__':
     main(parser.parse_args())
