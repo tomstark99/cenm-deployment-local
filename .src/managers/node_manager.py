@@ -73,10 +73,7 @@ class NodeManager:
                 firewall_processes = int(self.sysi.run_get_stdout(
                     'ps | grep -E ".*(cd corda-(bridge|float).+\&\& java -jar).+(\.jar).+(\.conf).*" | wc -l | sed -e "s/^ *//g"'
                 ))
-                if self.firewall:
-                    return node_processes + firewall_processes
-                else:
-                    return node_processes
+                return node_processes + firewall_processes if self.firewall else node_processes
 
             java_processes = _get_processes()
             while int(java_processes) > 0:
@@ -97,11 +94,9 @@ class NodeManager:
             service_deployments = '\n'.join([f'{service}: {service_info}' for service, service_info in self.functions.items()])
             self.logger.info(f'Deploying:\n\n{service_deployments}\n')
             if self.firewall:
-                functions_1 = {service: function for i, (service, function) in enumerate(self.functions.items()) if i in [0,1,2]}
-                functions_2 = {service: function for i, (service, function) in enumerate(self.functions.items()) if i in [3,4]}
-                # print(functions_1)
-                # print(functions_2)
-                # exit(1)
+                firewall_idx = range(len(self.functions))[-2:]
+                functions_1 = {service: function for i, (service, function) in enumerate(self.functions.items()) if i not in firewall_idx}
+                functions_2 = {service: function for i, (service, function) in enumerate(self.functions.items()) if i in firewall_idx}
                 for service, function in functions_1.items():
                     service_object = self.deployment_services[service]
                     self.logger.info(f'attempting to deploy {service}')

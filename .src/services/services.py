@@ -314,12 +314,18 @@ class ArtemisService(DeploymentService):
         return self.sysi.path_exists(f'{self.dir}/artemis-master')
 
     def _configure_artemis(self):
-        self.sysi.run(f'cd corda-tools && java -jar corda-tools-ha-utilities.jar configure-artemis --install --distribution ../corda-artemis/apache-artemis-{self.version} --path ../corda-artemis/artemis-master --user "CN=artemis, O=Corda, L=London, C=GB" --ha MASTER --acceptor-address 127.0.0.1:11005 --keystore ./artemis/artemis.jks --keystore-password artemisStorePass --truststore ./artemis/artemis-truststore.jks --truststore-password artemisTrustpass --connectors 127.0.0.1:11005')
+        self.sysi.run(f'cd corda-tools && java -jar corda-tools-ha-utilities.jar configure-artemis --install --distribution ../corda-artemis/apache-artemis-{self.version} --path ../corda-artemis/artemis-master --user "CN=artemis, O=Corda, L=London, C=GB" --ha MASTER --acceptor-address localhost:11005 --keystore ./artemis/artemis.jks --keystore-password artemisStorePass --truststore ./artemis/artemis-truststore.jks --truststore-password artemisTrustpass --connectors localhost:11005')
 
     def _copy_keystores(self):
         self.sysi.run('mkdir -p corda-artemis/artemis-master/etc/artemis', silent=True)
         self.sysi.copy('corda-tools/artemis/artemis.jks', 'corda-artemis/artemis-master/etc/artemis')
         self.sysi.copy('corda-tools/artemis/artemis-truststore.jks', 'corda-artemis/artemis-master/etc/artemis')
+
+    def _wait_for_float(self):
+        while int(self.sysi.run_get_stdout('ps | grep -E ".*(cd corda-float.+\&\& java -jar).+(\.jar).+(\.conf).*" | wc -l | sed -e "s/^ *//g"')) == 0:
+            sleep(5)
+            self.logger.info('Waiting for Corda Firewall (float) to start')
+        self.logger.info('Corda Firewall (float) started, starting Artemis')
 
     def download(self) -> bool:
         self.url = self.__build_url(Constants.ARTEMIS_URL.value)
@@ -336,8 +342,7 @@ class ArtemisService(DeploymentService):
         if not self._is_configured():
             self._configure_artemis()
             self._copy_keystores()
-        self.logger.info(f'Sleeping for 120 seconds to allow nodes to register and firewall to start')
-        self.sysi.sleep(120)
+        self._wait_for_float()
         while True:
             try:
                 self.logger.debug(f'[Running] (cd {self.dir} && ./artemis-master/bin/artemis run) to start {self.artifact_name} service')

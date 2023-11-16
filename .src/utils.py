@@ -2,6 +2,7 @@ import logging
 import os
 from enum import Enum
 from typing import List, Dict
+from time import sleep
 import warnings
 import functools
 import uuid
@@ -57,7 +58,7 @@ class Constants(Enum):
     ZONE_DEPLOY_TIME = 10
 
     NODE_DEPLOY_TIME = 60
-    FIREWALL_DEPLOY_TIME = 40
+    FIREWALL_DEPLOY_TIME = 20
     ARTEMIS_DEPLOY_TIME = 10
     
 
@@ -223,13 +224,14 @@ class FirewallTool:
     def _wait_for_ssl_keys(self):
         present = False
         while not present:
+            print('Waiting for ssl keys to be generated')
             self.logger.info('Waiting for ssl keys to be generated')
             exists = [self.sysi.path_exists(f'{node_dir}/certificates/sslkeystore.jks') for node_dir in self.nodes]
             present = all(exists)
+            sleep(5)
 
     def _import_ssl_key(self):
         self.logger.info('Importing ssl key')
-        self._wait_for_ssl_keys()
         cmd = f'java -jar corda-tools-ha-utilities.jar import-ssl-key --bridge-keystore-password=bridgeKeyStorePassword --bridge-keystore=./nodesCertificates/nodesUnitedSslKeystore.jks ' + ''.join([f'--node-keystores=../{node_dir}/certificates/sslkeystore.jks --node-keystore-passwords=cordacadevpass ' for node_dir in self.nodes])
         self.logger.info(f'[Running] {cmd}')
         self.sysi.run(f'cd corda-tools && {cmd}')
@@ -245,6 +247,7 @@ class FirewallTool:
     def setup_firewall(self):
         self.logger.info('Setting up firewall')
         if not glob.glob('corda-float/network-parameters') and not glob.glob('corda-bridge/network-parameters'):
+            self._wait_for_ssl_keys()
             self._import_ssl_key()
             self._get_node_networkparameters()
             self._copy_firewall_files()

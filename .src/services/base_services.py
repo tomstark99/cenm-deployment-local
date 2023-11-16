@@ -288,7 +288,8 @@ class NodeDeploymentService(DeploymentService):
         perl_dir = f'cenm-{new_dir}/node.conf'
         node_uuid = uuid.uuid4().hex[:5]
         self.sysi.perl(perl_dir, 'myLegalName.*O\\=\\K.*(?=, L\\=.*)', f'TestNode{node_number}-{node_uuid}')
-        self.sysi.perl(perl_dir, 'p2pAddress.*:\\K.*(?=\\"\\\n)', f'60{node_number}11')
+        if not new_firewall:
+            self.sysi.perl(perl_dir, 'p2pAddress.*:\\K.*(?=\\"\\\n)', f'60{node_number}11')
         self.sysi.perl(perl_dir, '^\\s*address.*:\\K.*(?=\\"\\\n)', f'60{node_number}12')
         self.sysi.perl(perl_dir, '^\\s*adminAddress.*:\\K.*(?=\\"\\\n)', f'60{node_number}13')
         self.sysi.perl(perl_dir, '^\\s*port \\= \\K.*(?=\\\n)', f'223{node_number}')
@@ -325,15 +326,22 @@ class NodeDeploymentService(DeploymentService):
         while exit_code != 0:
             self.logger.debug(f'[Running] (cd {self.dir} && java -jar {artifact_name}.jar initial-registration --network-root-truststore ./certificates/network-root-truststore.jks --network-root-truststore-password trustpass -f {self.config_file}) to start {self.artifact_name} service')
             exit_code = self.sysi.run_get_exit_code(f'(cd {self.dir} && java -jar {artifact_name}.jar initial-registration --network-root-truststore ./certificates/network-root-truststore.jks --network-root-truststore-password trustpass -f {self.config_file})')
+        self.logger.info(f'Sleeping for 2 minutes to allow registration to complete and for network parameters to be signed')
+        self.sysi.sleep(120)
+
+    def _wait_for_bridge(self):
+        while int(self.sysi.run_get_stdout('ps | grep -E ".*(cd corda-bridge.+\&\& java -jar).+(\.jar).+(\.conf).*" | wc -l | sed -e "s/^ *//g"')) == 0:
+            sleep(5)
+            self.logger.info('Waiting for Corda Firewall (bridge) to start')
+        self.logger.info('Corda Firewall (bridge) started, starting Artemis')
 
     def deploy(self):
         artifact_name = f'{self.artifact_name}-{self.version}'
 
         if not self._is_registered():
             self._register_node(artifact_name)
-        # WARNING: this means node now sleeps even if it is registered (probably ok?)
-        self.logger.info(f'Sleeping for 2 minutes to allow registration to complete and for network parameters to be signed')
-        self.sysi.sleep(120)
+        if self.firewall:
+            self._wait_for_bridge():
         while True:
             try:
                 self.logger.debug(f'[Running] (cd {self.dir} && java -jar {artifact_name}.jar -f {self.config_file}) to start {self.artifact_name} service')
