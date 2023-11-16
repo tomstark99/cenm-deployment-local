@@ -341,7 +341,7 @@ class NodeDeploymentService(DeploymentService):
         if not self._is_registered():
             self._register_node(artifact_name)
         if self.firewall:
-            self._wait_for_bridge():
+            self._wait_for_bridge()
         while True:
             try:
                 self.logger.debug(f'[Running] (cd {self.dir} && java -jar {artifact_name}.jar -f {self.config_file}) to start {self.artifact_name} service')
