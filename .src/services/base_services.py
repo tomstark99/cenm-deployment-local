@@ -365,12 +365,12 @@ class CordaFirewallDeploymentService(DeploymentService):
     """Base Service for a Corda Firewall deployment
     
     """
-    def _wait_for_certs(self):
+    def _wait_for_network_params(self):
         while not glob.glob(f'{self.dir}/network-parameters'):
             self.logger.info('Waiting for network-parameters file to be created')
             sleep(5)
 
-    def _get_cert_count(self) -> bool:
+    def _wait_for_network_params(self) -> bool:
         cert_count_1 = self.sysi.run_get_stdout(f"ls {self.dir}/artemis | xargs | wc -w | sed -e 's/^ *//g'")
         cert_count_2 = self.sysi.run_get_stdout(f"ls {self.dir}/tunnel | xargs | wc -w | sed -e 's/^ *//g'")
         return int(cert_count_1)+int(cert_count_2)
