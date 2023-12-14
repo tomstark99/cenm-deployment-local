@@ -174,7 +174,24 @@ def main(args: argparse.Namespace):
     validate_arguments(args)
 
     if args.version:
-        raise NotImplementedError("Version check is not implemented yet")
+        print("""
+Cenm local deployment manager
+=====================================
+
+Current CENM version:    {}
+Current Auth version:    {}
+Current Gateway version: {}
+Current NMS version:     {}
+
+Current Corda version:   {}
+
+    """.format(
+        cenm_version,
+        auth_version,
+        gateway_version,
+        nms_visual_version,
+        corda_version
+    ))
 
     service_manager = ServiceManager(
         username,
