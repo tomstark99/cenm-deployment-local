@@ -6,24 +6,12 @@ This is a complete python framework for deploying an enterprise grade CENM deplo
 - Generating a CENM PKI and distributing certificates to all CENM services.
 - Quickly deploy and stop a complete CENM network
 
-## One line install (deprecated)
-
-> <font color="orange">&#9888; Deprecation warning: this installation script is no longer being updated, instead please refer to [One-line auto-deployment](#one-line-auto-deployment) for a quick automated setup process.</font>
-
-If you want to skip having to clone the repo manually and running the script yourself here is a one-line-installation script, you will be prompted to setup a `.env` file with your credentials and CENM versions. Then it will download all your artifacts and config files and run the certificate generation for your CENM services
-
-```shell
-/bin/bash -c "$(curl -fsSl https://raw.githubusercontent.com/tomstark99/cenm-deployment-local/HEAD/install.sh)"
-```
-
-You then skip to the [Deployment Order](#deployment-order) section
-
 ## Getting started
 
 1. Clone this repo locally:
 
     ```shell
-    git clone --branch=dev/tom https://github.com/tomstark99/cenm-deployment-local.git
+    git clone --branch=release/1.5 https://github.com/tomstark99/cenm-deployment-local.git
     ```
 
 2. Copy and rename the `.env.template` file to `.env`, here you will fill in your credentials
