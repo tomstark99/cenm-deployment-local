@@ -71,15 +71,13 @@ class BaseService(ABC):
     def _check_presence(self) -> bool:
         for _, _, files in os.walk(self.dir):
             if f'{self.artifact_name}.jar' in files or f'{self.artifact_name}-{self.version}.jar' in files:
-                # Temporarily muting this message
-                # print(f'{self.artifact_name}-{self.version} already exists. Skipping.')
                 return True
         return False
     
     def _move(self):
         self.sysi.run(f'mv {self._zip_name()} {self.dir}')
         if self.ext == "zip":
-            self.sysi.run(f'(cd {self.dir} && unzip -q {self._zip_name()} && rm {self._zip_name()})')
+            self.sysi.run(f'(cd {self.dir} && unzip -q -o {self._zip_name()} && rm {self._zip_name()})')
 
     def download(self) -> bool:
         self._clone_repo()
@@ -90,9 +88,17 @@ class BaseService(ABC):
         self.error = self.dlm.download(self.url)
         self._move()
         return self.error
+
+    # TODO: wip
+    def validate_artifact(self) -> bool:
+        raise NotImplementedError
+        # return all([self._check_presence(), self.dlm.validate_download(self.url)])
+        # return self.dlm.check_md5sum(f'{self.dir}/{self._zip_name()}', self.url)
     
 class SignerPluginService(BaseService):
-
+    """Base service for signing service plugins
+    
+    """
     def _handle_plugin(self):
         if not self.sysi.path_exists(f'{self.dir}/plugins'):
             self.sysi.run(f'mkdir {self.dir}/plugins')
@@ -108,7 +114,9 @@ class SignerPluginService(BaseService):
         return self.error
 
 class CordappService(BaseService):
-
+    """Base service for CorDapps
+    
+    """
     def _handle_cordapp(self):
         if not self.sysi.path_exists(f'{self.dir}/cordapps'):
             self.sysi.run(f'mkdir {self.dir}/cordapps')
@@ -124,11 +132,11 @@ class CordappService(BaseService):
         return self.error
 
 class DeploymentService(BaseService):
-    """Base service for the the services that also can be deployed
+    """Base service for deployable services
 
     Args:
         first 8 args:
-            passed to BaseService constructor (see above)
+            passed to [BaseService] constructor (see above)
         config_file:
             The name of the configuration file for the service
         deployment_time:
@@ -225,7 +233,7 @@ class DeploymentService(BaseService):
         self.sysi.remove(self.dir)
 
 class NodeDeploymentService(DeploymentService):
-    """Service for Corda Node
+    """Base service for a Corda Node
 
     """
     def __str__(self) -> str:
@@ -269,18 +277,21 @@ class NodeDeploymentService(DeploymentService):
 
     def _register_node(self, artifact_name):
         self.logger.info('Registering node to the network')
+        self.sysi.wait_for_host_on_port(10000)
         exit_code = -1
         while exit_code != 0:
             self.logger.debug(f'[Running] (cd {self.dir} && java -jar {artifact_name}.jar initial-registration --network-root-truststore ./certificates/network-root-truststore.jks --network-root-truststore-password trustpass -f {self.config_file}) to start {self.artifact_name} service')
             exit_code = self.sysi.run_get_exit_code(f'(cd {self.dir} && java -jar {artifact_name}.jar initial-registration --network-root-truststore ./certificates/network-root-truststore.jks --network-root-truststore-password trustpass -f {self.config_file})')
-        self.logger.info(f'Sleeping for 2 minutes to allow registration to complete and for network parameters to be signed')
-        self.sysi.sleep(120)
 
     def deploy(self):
         artifact_name = f'{self.artifact_name}-{self.version}'
 
         if not self._is_registered():
             self._register_node(artifact_name)
+            self.sysi.wait_for_host_on_port(20000)
+            # wait for network parameters to be signed
+            self.sysi.sleep(90)
+
         while True:
             try:
                 self.logger.debug(f'[Running] (cd {self.dir} && java -jar {artifact_name}.jar -f {self.config_file}) to start {self.artifact_name} service')

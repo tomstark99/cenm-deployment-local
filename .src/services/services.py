@@ -119,7 +119,7 @@ class CliToolService(BaseService):
         if not self.sysi.path_exists(f'{self.dir}/cenm-tool'):
             self.sysi.run(f'mkdir -p {self.dir}/cenm-tool')
         self.sysi.run(f'mv {self._zip_name()} {self.dir}/cenm-tool')
-        self.sysi.run(f'(cd {self.dir}/cenm-tool && unzip -q {self._zip_name()} && rm {self._zip_name()} && chmod +x cenm)')
+        self.sysi.run(f'(cd {self.dir}/cenm-tool && unzip -q -o {self._zip_name()} && rm {self._zip_name()} && chmod +x cenm)')
 
     def download(self):
         self._clone_repo()
@@ -140,13 +140,41 @@ class IdentityManagerService(DeploymentService):
                     self.sysi.remove(os.path.join(root, dir))
         super().clean_artifacts()
 
+class IdentityManagerAngelService(IdentityManagerService):
+
+    def deploy(self):
+        self.logger.info(f'Thread started to deploy {self.artifact_name}')
+
+        while not glob.glob(f'{self.dir}/token'):
+            self.logger.info(f'Waiting for token file to be created')
+            sleep(5)
+
+        token = self.sysi.run_get_stdout(f'(cd {self.dir} && head -1 token)').strip()
+        # TODO: duplicated, remove before commit
+        print(f'Identity Manager token: {token}')
+        print(f'[Running] (cd {self.dir} && java -jar {self.artifact_name}.jar --jar-name=identitymanager.jar --zone-host=127.0.0.1 --zone-port=5061 --token={token} --service=IDENTITY_MANAGER --polling-interval=10 --working-dir=./ --tls=true --tls-keystore=./certificates/corda-ssl-identity-manager-keys.jks --tls-keystore-password=password --tls-truststore=./certificates/corda-ssl-trust-store.jks --tls-truststore-password=trustpass --verbose)')
+
+        while True:
+            try:
+                self.logger.debug(f'[Running] (cd {self.dir} && java -jar {self.artifact_name}.jar --jar-name=identitymanager.jar --zone-host=127.0.0.1 --zone-port=5061 --token={token} --service=IDENTITY_MANAGER --polling-interval=10 --working-dir=./ --tls=true --tls-keystore=./certificates/corda-ssl-identity-manager-keys.jks --tls-keystore-password=password --tls-truststore=./certificates/corda-ssl-trust-store.jks --tls-truststore-password=trustpass --verbose)')
+                exit_code = self.sysi.run_get_exit_code(f'(cd {self.dir} && java -jar {self.artifact_name}.jar --jar-name=identitymanager.jar --zone-host=127.0.0.1 --zone-port=5061 --token={token} --service=IDENTITY_MANAGER --polling-interval=10 --working-dir=./ --tls=true --tls-keystore=./certificates/corda-ssl-identity-manager-keys.jks --tls-keystore-password=password --tls-truststore=./certificates/corda-ssl-trust-store.jks --tls-truststore-password=trustpass --verbose)')
+                if exit_code != 0:
+                    raise RuntimeError(f'{self.artifact_name} service stopped')
+            except:
+                self.logger.warning(f'{self.artifact_name} service stopped. Restarting...')
+
+    def clean_runtime(self):
+        for root, dirs, files in os.walk(self.dir):
+            for file in files:
+                if file in self.runtime_files['angel_files']:
+                    self.sysi.remove(os.path.join(root, file), silent=True)
+        super().clean_runtime()
+
 class CrrToolService(BaseService):
 
     def _check_presence(self) -> bool:
         for _, _, files in os.walk(f'{self.dir}/tools/{self.artifact_name}'):
             if 'crrsubmissiontool.jar' in files:
-                # Temporarily muting this message
-                # print(f'crrsubmissiontool.jar already exists. Skipping.')
                 return True
         return False
 
@@ -155,7 +183,7 @@ class CrrToolService(BaseService):
             self.sysi.run(f'mkdir -p {self.dir}/tools')
         self.sysi.run(f'mkdir -p {self.dir}/tools/{self.artifact_name}')
         self.sysi.run(f'mv {self._zip_name()} {self.dir}/tools/{self.artifact_name}')
-        self.sysi.run(f'(cd {self.dir}/tools/{self.artifact_name} && unzip -q {self._zip_name()} && rm {self._zip_name()})')
+        self.sysi.run(f'(cd {self.dir}/tools/{self.artifact_name} && unzip -q -o {self._zip_name()} && rm {self._zip_name()})')
 
     def download(self):
         self._clone_repo()
@@ -178,21 +206,21 @@ class NetworkMapService(DeploymentService):
             self.logger.info(f'Waiting for nodeInfo file to be created')
             sleep(5)
         self.sysi.run(f'cp cenm-notary/nodeInfo-* {self.dir}')
-        self.logger.debug(f'Updating networkparameters.conf with node info')
-        self.sysi.run(f'(cd cenm-nmap && perl -i -pe "s/^.*notaryNodeInfoFile: \\"\K.*(?=\\")/$(ls nodeInfo-*)/" networkparameters.conf)')
-        new_params = self.sysi.run_get_stdout(f'(cd cenm-nmap && cat networkparameters.conf)')
+        self.logger.debug(f'Updating network-parameters-init.conf with node info')
+        self.sysi.run(f'(cd cenm-nmap && perl -i -pe "s/^.*notaryNodeInfoFile: \\"\K.*(?=\\")/$(ls nodeInfo-*)/" network-parameters-init.conf)')
+        new_params = self.sysi.run_get_stdout(f'(cd cenm-nmap && cat network-parameters-init.conf)')
         self.logger.info(f'new networkparams:\n{new_params}')
         
     def _set_network_params(self):
         self.logger.info(f'Setting network parameters')
-        self.sysi.run(f'cd {self.dir} && java -jar networkmap.jar -f networkmap.conf --set-network-parameters networkparameters.conf --network-truststore ./certificates/network-root-truststore.jks --truststore-password trustpass --root-alias cordarootca')
+        self.sysi.run(f'cd {self.dir} && java -jar networkmap.jar -f networkmap-init.conf --set-network-parameters network-parameters-init.conf --network-truststore ./certificates/network-root-truststore.jks --truststore-password trustpass --root-alias cordarootca')
 
     def clean_runtime(self):
         for root, dirs, files in os.walk(self.dir):
             for file in files:
                 if file.startswith("nodeInfo"):
                     self.sysi.remove(os.path.join(root, file))
-                if file.startswith("networkparameters"):
+                if file.startswith("network-parameters-init"):
                     self.sysi.run(f'perl -i -pe "s/^.*notaryNodeInfoFile: \\"\K.*(?=\\")/INSERT_NODE_INFO_FILE_NAME_HERE/" {os.path.join(root, file)}')
         super().clean_runtime()
 
@@ -201,6 +229,40 @@ class NetworkMapService(DeploymentService):
             self._copy_notary_node_info()
             self._set_network_params()
         super().deploy()
+
+class NetworkMapAngelService(NetworkMapService):
+
+    def deploy(self):
+        self.logger.info(f'Thread started to deploy {self.artifact_name}')
+
+        if not self._node_info():
+            self._copy_notary_node_info()
+            self._set_network_params()
+
+        while not glob.glob(f'{self.dir}/token'):
+            self.logger.info(f'Waiting for token file to be created')
+            sleep(5)
+
+        token = self.sysi.run_get_stdout(f'(cd {self.dir} && head -1 token)').strip()
+        # TODO: duplicated, remove before commit
+        print(f'Network Map token: {token}')
+        print(f'[Running] (cd {self.dir} && java -jar {self.artifact_name}.jar --jar-name=networkmap.jar --zone-host=127.0.0.1 --zone-port=5061 --token={token} --service=NETWORK_MAP --polling-interval=10 --working-dir=./ --network-truststore=./certificates/network-root-truststore.jks --truststore-password=trustpass --root-alias=cordarootca --network-parameters-file=network-parameters.conf --tls=true --tls-keystore=./certificates/corda-ssl-network-map-keys.jks --tls-keystore-password=password --tls-truststore=./certificates/corda-ssl-trust-store.jks --tls-truststore-password=trustpass --verbose)')
+
+        while True:
+            try:
+                self.logger.debug(f'[Running] (cd {self.dir} && java -jar {self.artifact_name}.jar --jar-name=networkmap.jar --zone-host=127.0.0.1 --zone-port=5061 --token={token} --service=NETWORK_MAP --polling-interval=10 --working-dir=./ --network-truststore=./certificates/network-root-truststore.jks --truststore-password=trustpass --root-alias=cordarootca --network-parameters-file=network-parameters.conf --tls=true --tls-keystore=./certificates/corda-ssl-network-map-keys.jks --tls-keystore-password=password --tls-truststore=./certificates/corda-ssl-trust-store.jks --tls-truststore-password=trustpass --verbose)')
+                exit_code = self.sysi.run_get_exit_code(f'(cd {self.dir} && java -jar {self.artifact_name}.jar --jar-name=networkmap.jar --zone-host=127.0.0.1 --zone-port=5061 --token={token} --service=NETWORK_MAP --polling-interval=10 --working-dir=./ --network-truststore=./certificates/network-root-truststore.jks --truststore-password=trustpass --root-alias=cordarootca --network-parameters-file=network-parameters.conf --tls=true --tls-keystore=./certificates/corda-ssl-network-map-keys.jks --tls-keystore-password=password --tls-truststore=./certificates/corda-ssl-trust-store.jks --tls-truststore-password=trustpass --verbose)')
+                if exit_code != 0:
+                    raise RuntimeError(f'{self.artifact_name} service stopped')
+            except:
+                self.logger.warning(f'{self.artifact_name} service stopped. Restarting...')
+
+    def clean_runtime(self):
+        for root, dirs, files in os.walk(self.dir):
+            for file in files:
+                if file in self.runtime_files['angel_files']:
+                    self.sysi.remove(os.path.join(root, file), silent=True)
+        super().clean_runtime()
 
 class NotaryService(NodeDeploymentService):
     
@@ -300,7 +362,13 @@ class PkiToolService(DeploymentService):
                     self.sysi.remove(os.path.join(root, dir))
 
 class SignerService(DeploymentService):
-    pass
+    
+    def clean_runtime(self):
+        for root, dirs, files in os.walk(self.dir):
+            for file in files:
+                if file in self.runtime_files['angel_files']:
+                    self.sysi.remove(os.path.join(root, file), silent=True)
+        super().clean_runtime()
 
 class SignerPluginNonCAService(SignerPluginService):
     pass

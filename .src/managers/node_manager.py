@@ -13,8 +13,10 @@ class NodeManager:
     """Deployment manager for handling a node deployments within CENM.
 
     Args:
-        services:
-            A list of services to deploy.
+        node:
+            The base node used, to create new nodes
+        node_count:
+            The number of nodes to deploy
 
     """
     def __init__(self, node: NodeDeploymentService, node_count: int):
@@ -67,7 +69,7 @@ class NodeManager:
     def _wait_for_service_termination(self):
             def _get_processes() -> int:
                 return int(self.sysi.run_get_stdout(
-                    'ps | grep -E ".*(cd cenm-node-.+\&\& java -jar).+(\.jar).+(\.conf).*" | wc -l | sed -e "s/^ *//g"'
+                    'ps | grep -E ".*(cd cenm-node-[0-9]+ \&\& java -jar).+(\.jar).+(\.conf).*" | wc -l | sed -e "s/^ *//g"'
                 ))
 
             java_processes = _get_processes()
