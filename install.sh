@@ -1,6 +1,6 @@
 #!/bin/bash -e
 printf "Cloning deployment repo...\n"
-git clone --branch=release/1.5 git@github.com:tomstark99/cenm-deployment-local.git --quiet
+git clone git@github.com:tomstark99/cenm-deployment-local.git --quiet
 (cd cenm-deployment-local && cp .env.template .env)
 
 cat << EOL
