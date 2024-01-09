@@ -198,7 +198,8 @@ class ServiceManager:
             username=       username,
             password=       password,
             config_file=    'notary.conf',
-            deployment_time=self.deploy_time.NOTARY_DEPLOY_TIME.value)
+            deployment_time=self.deploy_time.NOTARY_DEPLOY_TIME.value,
+            certificates=   1)
         self.NODE = NodeService(
             abb=            'node',
             dir=            'node',
@@ -209,7 +210,8 @@ class ServiceManager:
             username=       username,
             password=       password,
             config_file=    'node.conf',
-            deployment_time=self.deploy_time.NODE_DEPLOY_TIME.value)
+            deployment_time=self.deploy_time.NODE_DEPLOY_TIME.value,
+            certificates=   1)
         self.FINANCE_CONTRACTS_CORDAPP = FinanceContractsCordapp(
             abb=            'finance-contracts',
             dir=            'node',
