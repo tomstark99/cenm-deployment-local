@@ -287,7 +287,7 @@ class SystemInteract:
                 The host to wait on, default is localhost.
 
         """
-        while self.run_get_exit_code(f'timeout 5 ncat -z {host} {port}') != 0:
+        while self.run_get_exit_code(f'nc -z -G 3 {host} {port}') != 0:
             self.sleep(5)
         # Safety sleep to allow service on [port] to fully start
         self.sleep(10)
