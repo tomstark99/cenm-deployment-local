@@ -254,7 +254,7 @@ class SystemInteract:
         """
         return os.system(f'grep -q "{content}" {path}') == 0
 
-    def run(self, cmd, silent: bool = False):
+    def run(self, cmd: str, silent: bool = False):
         """Runs a system command
 
         Args:

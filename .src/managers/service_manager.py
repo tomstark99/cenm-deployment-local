@@ -473,6 +473,8 @@ class ServiceManager:
         for service in self._get_all_services(firewall):
             # deprecated
             download_errors[(f'{service.artifact_name}-{service.version}', service.dir)] = service.download()
+        # this returns true or false depending on download error but return is not used
+        self.db_manager.download()
         self.check_all(firewall)
 
     def check_all(self, firewall: bool):
