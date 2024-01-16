@@ -1,6 +1,8 @@
 from pyhocon import ConfigFactory
-from services.base_services import BaseService, SignerPluginService, CordappService, DeploymentService, NodeDeploymentService
+from services.base_services import *
 from managers.certificate_manager import CertificateManager
+from managers.firewall_certificate_manager import FirewallCertificateManager
+from utils import Constants
 from typing import List
 from time import sleep
 import glob
@@ -291,12 +293,144 @@ class CordaShellService(BaseService):
         self.error = self.dlm.download(self.url)
         self._handle_corda_shell()
         return self.error
+
+class CordaToolsHaUtilitiesService(DeploymentService):
+
+    def _create_dir(self):
+        if not self.sysi.path_exists(self.dir):
+            print(f'Creating {self.dir}')
+            self.sysi.run(f'mkdir {self.dir}')
+
+    def _move(self):
+        self.sysi.run(f'mv {self._zip_name()} {self.dir}/{self._zip_name(no_version=True)}')
+
+    def download(self) -> bool:
+        self._create_dir()
+        if self._check_presence():
+            return
+        # If artifact not present then download it
+        print(f'Downloading {self._zip_name()}')
+        self.error = self.dlm.download(self.url)
+        self._move()
+        return self.error
+
+    def deploy(self):
+        cert_manager = FirewallCertificateManager()
+        exit_code = -1
+        try:
+            while exit_code != 0:
+                exit_code = cert_manager.generate()
+        except KeyboardInterrupt:
+            print('Certificate generation cancelled')
+            exit(1)
+
+    def validate_certificates(self, services: List[DeploymentService]):
+        cert_manager = FirewallCertificateManager()
+        cert_manager.validate(services)
+
+    def clean_runtime(self):
+        for root, dirs, files in os.walk(self.dir):
+            for file in files:
+                if file in self.runtime_files['ha-tools']:
+                    self.sysi.remove(os.path.join(root, file))
+    
+    def clean_certificates(self):
+        for root, dirs, files in os.walk(self.dir):
+            for dir in dirs:
+                if dir in ["artemis", "tunnel", "nodesCertificates"]:
+                    self.sysi.remove(os.path.join(root, dir))
     
 class FinanceContractsCordapp(CordappService):
     pass
 
 class FinanceWorkflowsCordapp(CordappService):
     pass
+
+class CordaBridgeService(CordaFirewallDeploymentService):
+    pass
+
+class CordaFloatService(CordaFirewallDeploymentService):
+    pass
+
+class ArtemisService(DeploymentService):
+
+    # Overridden method not called in constructor of BaseService so have to manually call it below to update self.url
+    def __build_url(self, url: str):
+        return f'{url}/{self.version}/{self.artifact_name}.{self.ext}'
+
+    def _zip_name(self, no_version: bool = False):
+        return f'{self.artifact_name}.{self.ext}'
+
+    def _create_dir(self):
+        if not self.sysi.path_exists(self.dir):
+            print(f'Creating {self.dir}')
+            self.sysi.run(f'mkdir {self.dir}')
+
+    def _check_presence(self):
+        return self.sysi.path_exists(f'{self.dir}/apache-artemis-{self.version}')
+    
+    def _is_configured(self):
+        return self.sysi.path_exists(f'{self.dir}/artemis-master')
+
+    def _configure_artemis(self):
+        self.sysi.run(f'cd corda-tools && java -jar corda-tools-ha-utilities.jar configure-artemis --install --distribution ../corda-artemis/apache-artemis-{self.version} --path ../corda-artemis/artemis-master --user "CN=artemis, O=Corda, L=London, C=GB" --ha MASTER --acceptor-address localhost:11005 --keystore ./artemis/artemis.jks --keystore-password artemisStorePass --truststore ./artemis/artemis-truststore.jks --truststore-password artemisTrustpass --connectors localhost:11005')
+
+    def _copy_keystores(self):
+        self.sysi.run('mkdir -p corda-artemis/artemis-master/etc/artemis', silent=True)
+        self.sysi.copy('corda-tools/artemis/artemis.jks', 'corda-artemis/artemis-master/etc/artemis')
+        self.sysi.copy('corda-tools/artemis/artemis-truststore.jks', 'corda-artemis/artemis-master/etc/artemis')
+
+    def _wait_for_float(self):
+        while int(self.sysi.run_get_stdout('ps | grep -E ".*(cd corda-float.+\&\& java -jar).+(\.jar).+(\.conf).*" | wc -l | sed -e "s/^ *//g"')) == 0:
+            sleep(5)
+            self.logger.info('Waiting for Corda Firewall (float) to start')
+        self.logger.info('Corda Firewall (float) started, starting Artemis')
+
+    def download(self) -> bool:
+        self.url = self.__build_url(Constants.ARTEMIS_URL.value)
+        self._create_dir()
+        if self._check_presence():
+            return
+        # If artifact not present then download it
+        print(f'Downloading {self._zip_name()}')
+        self.error = self.dlm.download(self.url)
+        self._move()
+        return self.error
+
+    def deploy(self):
+        if not self._is_configured():
+            self._configure_artemis()
+            self._copy_keystores()
+        self._wait_for_float()
+        while True:
+            try:
+                self.logger.debug(f'[Running] (cd {self.dir} && ./artemis-master/bin/artemis run) to start {self.artifact_name} service')
+                exit_code = self.sysi.run_get_exit_code(f'(cd {self.dir} && ./artemis-master/bin/artemis run)')
+                if exit_code != 0:
+                    raise RuntimeError(f'{self.artifact_name} service stopped')
+            except:
+                self.logger.warning(f'{self.artifact_name} service stopped. Restarting...')
+
+    def validate_config(self) -> str:
+        return ""
+
+    def validate_certs(self) -> str:
+        return ""
+
+    def clean_runtime(self):
+        for root, dirs, files in os.walk(self.dir):
+            for dir in dirs:
+                if dir in self.runtime_files['artemis']:
+                    self.sysi.remove(os.path.join(root, dir))
+
+    def clean_artifacts(self):
+        for root, dirs, files in os.walk(self.dir):
+            for dir in dirs:
+                if dir in [f"apache-artemis-{Constants.ARTEMIS_VERSION.value}"]:
+                    self.sysi.remove(os.path.join(root, dir))
+
+    def clean_certificates(self):
+        pass
 
 class PkiToolService(DeploymentService):
 
