@@ -244,9 +244,6 @@ class NetworkMapAngelService(NetworkMapService):
             sleep(5)
 
         token = self.sysi.run_get_stdout(f'(cd {self.dir} && head -1 token)').strip()
-        # TODO: duplicated, remove before commit
-        print(f'Network Map token: {token}')
-        print(f'[Running] (cd {self.dir} && java -jar {self.artifact_name}.jar --jar-name=networkmap.jar --zone-host=127.0.0.1 --zone-port=5061 --token={token} --service=NETWORK_MAP --polling-interval=10 --working-dir=./ --network-truststore=./certificates/network-root-truststore.jks --truststore-password=trustpass --root-alias=cordarootca --network-parameters-file=network-parameters.conf --tls=true --tls-keystore=./certificates/corda-ssl-network-map-keys.jks --tls-keystore-password=password --tls-truststore=./certificates/corda-ssl-trust-store.jks --tls-truststore-password=trustpass --verbose)')
 
         while True:
             try:
