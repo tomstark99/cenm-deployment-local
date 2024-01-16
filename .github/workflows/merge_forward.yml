@@ -18,10 +18,12 @@ jobs:
 
       - name: Setup Git
         run: |
-          git config --global user.name 'merge-forward[bot]'
-          git config --global user.email 'merge-forward[bot]@users.noreply.github.com'
+          git config --global user.name github-actions[bot]
+          git config --global user.email github-actions[bot]@users.noreply.github.com
         
       - name: Create PR
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
           git checkout -b merge-forward-postgres origin/release/1.6
           git push origin merge-forward-postgres
@@ -39,10 +41,12 @@ jobs:
 
       - name: Setup Git
         run: |
-          git config --global user.name 'github-actions[bot]'
-          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git config --global user.name github-actions[bot]
+          git config --global user.email github-actions[bot]@users.noreply.github.com
         
       - name: Create PR
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
           git checkout -b merge-forward-firewall origin/release/1.6
           git push origin merge-forward-firewall
