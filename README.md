@@ -1,6 +1,6 @@
 # cenm-deployment-local
 
-This is a complete python framework for deploying an enterprise grade CENM deployment in a local environment for testing related purposes. This is the host repo to tie in separate CENM service config repos. Features of this framework include:
+This is a complete Python framework for deploying an enterprise grade CENM deployment in a local environment for testing related purposes. This is the host repo to tie in separate CENM service config repos. Features of this framework include:
 
 - Download CENM artifacts, including plugins, database drivers and Corda node CorDapps
 - Generating a CENM PKI and distributing certificates to all CENM services.
@@ -11,7 +11,7 @@ This is a complete python framework for deploying an enterprise grade CENM deplo
 1. Clone this repo locally:
 
     ```shell
-    git clone --branch=release/1.5 https://github.com/tomstark99/cenm-deployment-local.git
+    git clone https://github.com/tomstark99/cenm-deployment-local.git
     ```
 
 2. Copy and rename the `.env.template` file to `.env`, here you will fill in your credentials
@@ -32,6 +32,8 @@ This is a complete python framework for deploying an enterprise grade CENM deplo
     NOTARY_VERSION=<corda_version>
     ```
 
+    _Note: It is not recommended that you use a Corda version lower than 4.8.X these versions are no longer supported and might cause deployment problems._
+
 4. The `pyhocon` package is required for this script to work, install this in your python installation using
 
     > <font color="orange">&#9888; If you have more than one python installation then your default `pip` command may default to a different installation than your default `python` or `python3` command. If this is the case you may get errors that the `pyhocon` package still couldn't be found after installing it. Make sure you use the correct pip command for the python installation.</font>
@@ -45,22 +47,23 @@ This is a complete python framework for deploying an enterprise grade CENM deplo
     ```
     $ python3 setup_script.py -h
     usage: setup_script.py [-h]
-                        [--setup-dir-structure]
-                        [--download-individual DOWNLOAD_INDIVIDUAL]
-                        [--generate-certs]
-                        [--run-default-deployment]
-                        [--run-node-deployment RUN_NODE_DEPLOYMENT]
-                        [--nodes]
-                        [--clean-runtime]
-                        [--clean-certs]
-                        [--clean-artifacts]
-                        [--deep-clean]
-                        [--clean-individual-artifacts CLEAN_INDIVIDUAL_ARTIFACTS]
-                        [--health-check-frequency HEALTH_CHECK_FREQUENCY]
-                        [--validate]
-                        [--version]
+                           [--setup-dir-structure]
+                           [--download-individual DOWNLOAD_INDIVIDUAL]
+                           [--generate-certs]
+                           [--run-default-deployment]
+                           [--run-node-deployment RUN_NODE_DEPLOYMENT]
+                           [--deploy-without-angel]
+                           [--nodes]
+                           [--clean-runtime]
+                           [--clean-certs]
+                           [--clean-artifacts]
+                           [--deep-clean]
+                           [--clean-individual-artifacts CLEAN_INDIVIDUAL_ARTIFACTS]
+                           [--health-check-frequency HEALTH_CHECK_FREQUENCY]
+                           [--validate]
+                           [--version]
 
-    Download CENM artifacts from Artifactory
+    A modular framework for local CENM deployments and testing.
 
     options:
     -h, --help            show this help message and exit
@@ -74,6 +77,8 @@ This is a complete python framework for deploying an enterprise grade CENM deplo
                             Runs a default deployment, following the steps from README
     --run-node-deployment RUN_NODE_DEPLOYMENT
                             Run node deployments for a given number of nodes
+    --deploy-without-angel
+                            Deploys services without the angel service
     --nodes               To be used together with clean arguments to specify cleaning for node directorie
     --clean-runtime       Remove all generated runtime files
     --clean-certs         Remove all generated certificates
@@ -90,7 +95,7 @@ This is a complete python framework for deploying an enterprise grade CENM deplo
 
 ### Setup Directory Structure
 
-To set up your directory structure and certificates so that you can start your CENM deployment there are two commands in the script that can be run simultaneously
+To set up your directory structure and certificates so that you can start your CENM deployment there are two commands in the script that can be run simultaneously:
 
 ```shell
 python3 setup_script.py --setup-dir-structure --generate-certs
@@ -120,7 +125,7 @@ A health check runs on the subprocesses every 30 seconds and will restart servic
 
 ### CENM Environment Re-deployment
 
-Sometimes you may have missed something in your config or setup and need to re-deploy, or you want to shut down your existing network, do some changes and then deploy again. This is all possible with the script.
+Sometimes you may have missed something in your config or setup and need to re-deploy, or you want to shut down your existing network, do some changes and then deploy again.
 
 You can stop a running CENM deployment with a keyboard interrupt `Ctrl+C`, this will gracefully stop all services and shutdown your network. If you then want to start the **same** network again with the same databases and registered nodes, you can do this by running:
 
@@ -141,81 +146,8 @@ CENM services should be deployed in a particular order, this being:
     ```
     
     This will run the pki tool and copy the generated certificates into the correct locations for each service
-    
-2. Start the identity manager
 
-    ```shell
-    java -jar identitymanager.jar -f identitymanager.conf
-    ```
-    
-3. Start the signer service
-
-    ```shell
-    java -jar signer.jar -f signer.conf
-    ```
-    
-4. Register the notary
-
-    ```shell
-    java -jar corda.jar \
-        -f notary.conf
-        --initial-registration \ # Depending on the Corda version
-        --network-root-truststore ./certificates/network-root-truststore.jks \
-        --network-root-truststore-password trustpass
-    ```
-    
-    _Note: There is currently a known issue (https://github.com/tomstark99/cenm-deployment-local/issues/5) where corda version of `4.5.X` might cause exceptions during registration._
-    
-5. Update the `networkparameters.conf` file with the correct `nodeInfo`
-
-    When the notary is registered with the network it generates a `nodeInfo-XXXXX...` file. The name of this file needs to replace the `INSERT_NODE_INFO_FILE_NAME_HERE` placeholder in the `cenm-nmap/networkparameters.conf` file e.g.
-    
-    ```properties
-    notaries : [
-        {
-            notaryNodeInfoFile: "nodeInfo-DFD4D403F65EA6C9B33B653A8B855CB3C4F04D599B373E662EBD2146241219F2"
-            validating = false
-        }
-    ]
-
-    minimumPlatformVersion = 4
-    maxMessageSize = 10485760
-    maxTransactionSize = 10485760
-    eventHorizonDays = 10 # Duration in days
-    ```
-    
-    The `nodeInfo-XXXXX...` file should also be copied to the `cenm-nmap/` folder
-    
-    ```shell
-    cp cenm-notary/nodeInfo-* cenm-nmap/
-    ```
-    
-6. Set network parameters
-
-    ```shell
-    java -jar networkmap.jar \
-        -f networkmap.conf \
-        --set-network-parameters networkparameters.conf \
-        --network-truststore ./certificates/network-root-truststore.jks \
-        --truststore-password trustpass \
-        --root-alias cordarootca
-    ```
-    
-7. Start the network map
-
-    ```shell
-    java -jar networkmap.jar -f networkmap.conf
-    ```
-    
-8. Start the notary
-
-    ```shell
-    java -jar corda.jar -f notary.conf
-    ```
-    
-    _Note: you may have to wait while the network parameters that were set in step 5 are signed, this can take a few minutes._
-
-9. Start the auth service
+2. Start the auth service
 
     ```shell
     java -jar accounts-application.jar \
@@ -226,17 +158,15 @@ CENM services should be deployed in a particular order, this being:
         --verbose
     ```
     
-10. Start the private gateway service
+3. Start the private gateway service
 
     ```shell
     java -jar gateway-service.jar -f private.conf
     ```
-    
-    
 
-    > <font color="orange">&#9888; The public gateway service is optional and is not covered in the setup for this deployment. The public gateway service is intended for a real-world deployment  where you want a general gateway access for network users since it doesn't include the user admin control options.
+    > <font color="orange">&#9888; The public gateway service is optional and is not covered in the setup for this deployment. The public gateway service is intended for a real-world deployment where you want to provide gateway access for standard network users which doesn't include the user admin control options.
     > 
-    > Step 12-15 of this guide are focused on auth/gateway setup where, for the purpose of this deployment only the private gateway is configured. The private gateway has all the functionality of the public one so unless you are doing specific public gateway testing it is recommended you ignore it.</font>
+    > Step 6-9 of this guide are focused on auth/gateway setup where, for the purpose of this deployment only the private gateway is configured. The private gateway has all the functionality of the public one so unless you are doing specific public gateway testing it is recommended you ignore it.</font>
 
     You can deploy the public gateway in the same way as the private gateway:
 
@@ -244,7 +174,7 @@ CENM services should be deployed in a particular order, this being:
     java -jar gateway-service.jar -f public.conf
     ```
     
-11. Start the zone service
+4. Start the zone service
 
     ```shell
     java -jar zone.jar \
@@ -269,9 +199,9 @@ CENM services should be deployed in a particular order, this being:
         --tls-truststore-password=trustpass
     ```
 
-12. Verify your gateway is up by navigating to http://localhost:8089
+5. Verify your gateway is up by navigating to http://localhost:8089 where you should see a login screen.
 
-13. Run setupAuth initially to create users in the global zone:
+6. Run setupAuth initially to create users in the global zone:
 
     ```shell
     cd cenm-auth/setup-auth
@@ -280,7 +210,7 @@ CENM services should be deployed in a particular order, this being:
 
     _Note: this script requires [jq](https://stedolan.github.io/jq/download/), a command line JSON processor that can be installed easily in various ways._
 
-14. Create a 'Main' subzone
+7. Set the identity manager config using the CENM CLI-tool
 
     Navigate to the cenm-tool directory
 
@@ -288,14 +218,96 @@ CENM services should be deployed in a particular order, this being:
     cd cenm-gateway/cenm-tool
     ```
 
-    First set your global zone config for identity manager and network map:
+    First set your global zone config for identity manager:
 
     ```shell
     ./cenm context login -s http://127.0.0.1:8089 -u config-maintainer -p <password>
     ./cenm identity-manager config set-admin-address -a=127.0.0.1:5053
-    ./cenm identity-manager config set -f=identitymanager.conf --zone-token
-    ./cenm netmap config set-admin-address -a=127.0.0.1:5053
+    ./cenm identity-manager config set -f=identitymanager-init.conf --zone-token
     ./cenm context logout http://127.0.0.1:8089
+    ```
+
+    _Note: Make a note of the token returned from the `--zone-token` command it is needed for the next step._
+
+8. Start the Angel service for `IDENTITY_MANAGER`
+
+    Using the zone token generated from the step above, start the Angel service for the Identity Manager.
+
+    ```shell
+    java -jar angel.jar \
+        --jar-name=identitymanager.jar \
+        --zone-host=127.0.0.1 \
+        --zone-port=5061 \
+        --token=<idman-zone-token> \
+        --service=IDENTITY_MANAGER \
+        --polling-interval=10 \
+        --working-dir=./ \
+        --tls=true \
+        --tls-keystore=./certificates/corda-ssl-identity-manager-keys.jks \
+        --tls-keystore-password=password \
+        --tls-truststore=./certificates/corda-ssl-trust-store.jks \
+        --tls-truststore-password=trustpass \
+        --verbose
+    ```
+    
+9. Start the signer service
+
+    ```shell
+    java -jar signer.jar -f signer.conf
+    ```
+
+    _Note: While the Signer can also be deployed using the Angel service this is not the default behavior of the CENM helm chat deployment and therefore is not covered in this guide._
+
+10. Register the notary
+
+    ```shell
+    java -jar corda.jar initial-registration \
+        -f notary.conf
+        --network-root-truststore ./certificates/network-root-truststore.jks \
+        --network-root-truststore-password trustpass
+    ```
+    
+11. Update the `network-parameters-init.conf` file with the correct `nodeInfo`
+
+    When the notary is registered with the network it generates a `nodeInfo-XXXXX...` file. The name of this file needs to replace the `INSERT_NODE_INFO_FILE_NAME_HERE` placeholder in the `cenm-nmap/network-parameters-init.conf` file e.g.
+    
+    ```properties
+    notaries : [
+        {
+            notaryNodeInfoFile: "nodeInfo-DFD4D403F65EA6C9B33B653A8B855CB3C4F04D599B373E662EBD2146241219F2"
+            validating = false
+        }
+    ]
+
+    minimumPlatformVersion = 4
+    maxMessageSize = 10485760
+    maxTransactionSize = 10485760
+    eventHorizonDays = 10 # Duration in days
+    ```
+    
+    The `nodeInfo-XXXXX...` file should also be copied to the `cenm-nmap/` folder
+    
+    ```shell
+    cp cenm-notary/nodeInfo-* cenm-nmap/
+    ```
+    
+12. Set network parameters
+
+    ```shell
+    java -jar networkmap.jar \
+        -f networkmap-init.conf \
+        --set-network-parameters network-parameters-init.conf \
+        --network-truststore ./certificates/network-root-truststore.jks \
+        --truststore-password trustpass \
+        --root-alias cordarootca
+    ```
+
+13. Create a 'Main' subzone
+
+    Navigate to the cenm-tool directory
+
+    ```shell
+    cd cenm-gateway/cenm-tool
     ```
 
     To create a subzone, you need the `network-maintainer` login:
@@ -303,9 +315,9 @@ CENM services should be deployed in a particular order, this being:
     ```shell
     ./cenm context login -s http://127.0.0.1:8089 -u network-maintainer -p <password>
     ./cenm zone create-subzone \
-        --config-file=../../cenm-nmap/networkmap.conf \
+        --config-file=../../cenm-nmap/networkmap-init.conf \
         --network-map-address=127.0.0.1:20000 \
-        --network-parameters=../../cenm-nmap/networkparameters.conf \
+        --network-parameters=../../cenm-nmap/network-parameters-init.conf \
         --label=Main \
         --label-color='#941213' \
         --zone-token
@@ -331,34 +343,52 @@ CENM services should be deployed in a particular order, this being:
     Set your network map config for the subzone and replace the `<SUBZONE_ID>` with the id returned from:
 
     ```shell
-    ./cenm netmap config set -s <SUBZONE_ID> -f=networkmap.conf
+    ./cenm netmap config set -s <SUBZONE_ID> -f=networkmap-init.conf
     ./cenm context logout http://127.0.0.1:8089
     ```
+    
+    
+14. Start the Angel service for `NETWORK_MAP`
 
-<!-- 15. Set your zone config
-
-    Set the 'Main' zone config to be the same as the global zone, for this you will need the `config-maintainer` login
+    Using the zone token generated from the step above, start the Angel service for the Network Map.
 
     ```shell
-    ./cenm context login -s http://127.0.0.1:8089 -u config-maintainer -p <password>
-    ./cenm identity-manager config set \
-        --config-file=../../cenm-idman/identitymanager.conf \
-        --zone-token
-    ./cenm signer config set \
-        --config-file=../../cenm-signer/signer.conf \
-        --zone-token
+    java -jar angel.jar \
+    --jar-name=networkmap.jar \
+    --zone-host=127.0.0.1 \
+    --zone-port=5061 \
+    --token=<nmap-zone-token> \
+    --service=NETWORK_MAP \
+    --polling-interval=10 \
+    --working-dir=./ \
+    --network-truststore=./certificates/network-root-truststore.jks \
+    --truststore-password=trustpass \
+    --root-alias=cordarootca \
+    --network-parameters-file=network-parameters.conf \
+    --tls=true \
+    --tls-keystore=./certificates/corda-ssl-network-map-keys.jks \
+    --tls-keystore-password=password \
+    --tls-truststore=./certificates/corda-ssl-trust-store.jks \
+    --tls-truststore-password=trustpass \
+    --verbose
     ```
-
-    Again, make a note of the zone token that is returned in case you need it later (for example if you are using the angel service) -->
     
-15. To grant your users access to the new subzone, replace the `<SUBZONE_ID>` with the id returned from
+15. Start the notary
+
+    ```shell
+    java -jar corda.jar -f notary.conf
+    ```
+    
+    _Note: you may have to wait while the network parameters that were set in step 5 are signed, this can take a few minutes._
+    
+16. To grant your users access to the new subzone, replace the `<SUBZONE_ID>` with the id returned from this command:
 
     ```shell
     ./cenm context login -s http://127.0.0.1:8089 -u config-maintainer -p <password>
     ./cenm zone get-subzones
     ```
 
-    The user roles are located in the cenm-auth directory, in the example below the zone id is `1` which should be substituted `"s//<here>/g"` in the `perl` command
+    The user roles are located in the cenm-auth directory, in the example below the zone id is `1` which should be substituted `"s//<here>/g"` in the `perl` command below:
 
     ```shell
     cd cenm-auth/setup-auth/roles

@@ -15,15 +15,15 @@ class DeploymentManager:
     """
 
     def __init__(self, services: List[DeploymentService]):
-        self.deployment_services = {s.artifact_name: s for s in services}
-        self.functions = {s.artifact_name: s.deploy for s in services}
+        self.deployment_services = {f'{s.artifact_name}-{s.dir}': s for s in services}
+        self.functions = {f'{s.artifact_name}-{s.dir}': s.deploy for s in services}
         self.processes = []
         self.versions = self._get_version_dict()
         self.logger = Logger().get_logger(__name__)
         self.sysi = SystemInteract()
     
     def _run_subzone_setup(self) -> bool:
-        return all(service in self.deployment_services.keys() for service in ["accounts-application", "gateway-service", "zone"]) and (not self._node_info())
+        return all(service in self.deployment_services.keys() for service in ["accounts-application-cenm-auth", "gateway-service-cenm-gateway", "zone-cenm-zone"]) and (not self._node_info())
 
     def _get_version_dict(self) -> Dict[str, str]:
         with open(".env", 'r') as f:
@@ -39,10 +39,6 @@ class DeploymentManager:
 
         cenm_tool = CenmTool(self.versions['NMS_VISUAL_VERSION'])
 
-        while not self._node_info():
-            self.logger.info("Waiting for nodeInfo files to be created")
-            sleep(5)
-        self.logger.info("Waiting for network parameters to be signed")
         tokens = cenm_tool.cenm_subzone_deployment_init()
         self.logger.info(f"Subzone tokens: {tokens}")
 
@@ -60,7 +56,7 @@ class DeploymentManager:
     def _wait_for_service_termination(self):
             def _get_processes() -> int:
                 return int(self.sysi.run_get_stdout(
-                    'ps | grep -E ".*(cd cenm-.+\&\& java -jar).+(\.jar).+(\.conf).*" | wc -l | sed -e "s/^ *//g"'
+                    'ps | grep -E ".*(cd cenm-[a-z]+ \&\& java -jar).+(\.jar).+(\.conf)*.*" | wc -l | sed -e "s/^ *//g"'
                 ))
 
             java_processes = _get_processes()
@@ -90,8 +86,9 @@ class DeploymentManager:
             if self.run_subzone_setup:
                 self.logger.info('All services deployed, setting up subzones')
                 self._setup_auth()
-                self.logger.info('Subzones setup, starting health check')
+                self.logger.info('Subzones setup')
             
+            self.logger.info('Starting health check')
             while True:
                 self.logger.info('Running process health check')
                 for process in self.processes:
@@ -117,4 +114,4 @@ class DeploymentManager:
                 
             self._wait_for_service_termination()
             self.logger.info('All processes terminated, exiting')
-            exit(1)
+            exit(0)

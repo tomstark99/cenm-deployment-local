@@ -8,7 +8,7 @@ from typing import Dict
 from managers.service_manager import ServiceManager
 from utils import SystemInteract
 
-parser = argparse.ArgumentParser(description='Download CENM artifacts from Artifactory')
+parser = argparse.ArgumentParser(description='A modular framework for local CENM deployments and testing.')
 parser.add_argument(
     '--setup-dir-structure', 
     default=False, 
@@ -37,6 +37,12 @@ parser.add_argument(
     default=0,
     type=int,
     help='Run node deployments for a given number of nodes'
+)
+parser.add_argument(
+    '--deploy-without-angel',
+    default=False, 
+    action='store_true',
+    help='Deploys services without the angel service'
 )
 parser.add_argument(
     '--nodes',
@@ -113,6 +119,21 @@ except KeyError as e:
     raise KeyError(f"Missing variable in .env file: {e}")
 
 def validate_arguments(args: argparse.Namespace):
+    # Check .env variables are not empty
+    if not username:
+        raise KeyError("ARTIFACTORY_USERNAME is empty")
+    if not password:
+        raise KeyError("ARTIFACTORY_API_KEY is empty")
+    if not auth_version:
+        raise KeyError("AUTH_VERSION is empty")
+    if not gateway_version:
+        raise KeyError("GATEWAY_VERSION is empty")
+    if not cenm_version:
+        raise KeyError("CENM_VERSION is empty")
+    if not nms_visual_version:
+        raise KeyError("NMS_VISUAL_VERSION is empty")
+    if not corda_version:
+        raise KeyError("NOTARY_VERSION is empty")
     # Check if only one of the clean flags are used
     clean_args = [args.clean_runtime, args.deep_clean, args.clean_artifacts, args.clean_certs]
     if sum(clean_args) > 1:
@@ -128,6 +149,7 @@ def validate_arguments(args: argparse.Namespace):
         args.clean_artifacts, 
         args.deep_clean, 
         args.run_default_deployment, 
+        args.deploy_without_angel,
         args.run_node_deployment,
         args.nodes,
         args.version, 
@@ -154,6 +176,8 @@ def validate_arguments(args: argparse.Namespace):
         raise ValueError("Please specify between 0 and 9 nodes")
     if args.run_default_deployment and args.run_node_deployment:
         raise ValueError("Please only run one deployment at a time")
+    if args.deploy_without_angel and not args.run_default_deployment:
+        raise ValueError("Cannot use --deploy-without-angel without --run-default-deployment")
     if args.run_default_deployment:
         if SystemInteract().run_get_exit_code("jq --help", silent=True) != 0:
             raise RuntimeError("jq is not installed in your shell, please install it and try again")
@@ -167,31 +191,11 @@ Your python installation is missing the:
     pyhocon
 
 package which is required for this script to run. Please install it using:
-    pip install pyhocon""")
+    python -m pip install pyhocon""")
 
 def main(args: argparse.Namespace):
 
     validate_arguments(args)
-
-    if args.version:
-        print("""
-Cenm local deployment manager
-=====================================
-
-Current CENM version:    {}
-Current Auth version:    {}
-Current Gateway version: {}
-Current NMS version:     {}
-
-Current Corda version:   {}
-
-    """.format(
-        cenm_version,
-        auth_version,
-        gateway_version,
-        nms_visual_version,
-        corda_version
-    ))
 
     service_manager = ServiceManager(
         username,
@@ -201,7 +205,8 @@ Current Corda version:   {}
         cenm_version,
         nms_visual_version,
         corda_version,
-        args.run_node_deployment
+        args.run_node_deployment,
+        args.deploy_without_angel
     )
 
     if args.download_individual:
@@ -219,6 +224,9 @@ Current Corda version:   {}
         args.clean_runtime,
         args.nodes
     )
+
+    if args.version:
+        service_manager.versions()
 
     if args.validate:
         service_manager.validate()
