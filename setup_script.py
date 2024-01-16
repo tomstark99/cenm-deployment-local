@@ -229,7 +229,7 @@ def main(args: argparse.Namespace):
         service_manager.versions()
 
     if args.validate:
-        service_manager.check_all()
+        service_manager.validate()
 
     if args.setup_dir_structure:
         service_manager.download_all()

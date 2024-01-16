@@ -411,6 +411,11 @@ class ServiceManager:
         self._raise_exception_group(check_errors)
         print("Validating complete")
 
+    def validate(self, pure_cenm: bool = False):
+        self.check_all()
+        self.config_manager.validate(self.get_deployment_services(pure_cenm=pure_cenm))
+        self.PKI.validate_certificates(self.get_deployment_services(pure_cenm=pure_cenm))
+
     def download_specific(self, services: List[str]):
         print("Downloading individual artifacts does not work with any other arguments, script will exit after downloading.")
         # deprecated
