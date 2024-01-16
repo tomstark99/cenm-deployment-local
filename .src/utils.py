@@ -227,7 +227,7 @@ class SystemInteract:
         """
         return os.system(f'grep -q "{content}" {path}') == 0
 
-    def run(self, cmd: str):
+    def run(self, cmd: str, silent: bool = False):
         """Runs a system command
 
         Args:
@@ -235,7 +235,10 @@ class SystemInteract:
                 Command to run.
 
         """
-        os.system(cmd)
+        if silent:
+            os.system(f'{cmd} > /dev/null 2>&1')
+        else:
+            os.system(cmd)
 
     def run_get_exit_code(self, cmd: str, silent: bool = False) -> int:
         """Runs a system command and returns the exit code
