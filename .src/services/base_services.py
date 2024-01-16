@@ -71,15 +71,13 @@ class BaseService(ABC):
     def _check_presence(self) -> bool:
         for _, _, files in os.walk(self.dir):
             if f'{self.artifact_name}.jar' in files or f'{self.artifact_name}-{self.version}.jar' in files:
-                # Temporarily muting this message
-                # print(f'{self.artifact_name}-{self.version} already exists. Skipping.')
                 return True
         return False
     
     def _move(self):
         self.sysi.run(f'mv {self._zip_name()} {self.dir}')
         if self.ext == "zip":
-            self.sysi.run(f'(cd {self.dir} && unzip -q {self._zip_name()} && rm {self._zip_name()})')
+            self.sysi.run(f'(cd {self.dir} && unzip -q -o {self._zip_name()} && rm {self._zip_name()})')
 
     def download(self) -> bool:
         self._clone_repo()
@@ -91,10 +89,15 @@ class BaseService(ABC):
         self._move()
         return self.error
 
-
+    # TODO: wip
+    def validate_artifact(self) -> bool:
+        raise NotImplementedError
+        # return all([self._check_presence(), self.dlm.validate_download(self.url)])
+        # return self.dlm.check_md5sum(f'{self.dir}/{self._zip_name()}', self.url)
+    
 class SignerPluginService(BaseService):
-    """Base service for plugins used by the Signer service
-
+    """Base service for signing service plugins
+    
     """
     def _handle_plugin(self):
         if not self.sysi.path_exists(f'{self.dir}/plugins'):
@@ -112,8 +115,8 @@ class SignerPluginService(BaseService):
 
 
 class CordappService(BaseService):
-    """Base service for CordDapps to be used by nodes
-
+    """Base service for CorDapps
+    
     """
     def _handle_cordapp(self):
         if not self.sysi.path_exists(f'{self.dir}/cordapps'):
@@ -131,11 +134,11 @@ class CordappService(BaseService):
 
 
 class DeploymentService(BaseService):
-    """Base service for the the services that also can be deployed
+    """Base service for deployable services
 
     Args:
         first 8 args:
-            passed to BaseService constructor (see above).
+            passed to [BaseService] constructor (see above)
         config_file:
             The name of the configuration file for the service.
         deployment_time:
@@ -236,14 +239,14 @@ class DeploymentService(BaseService):
 
 
 class NodeDeploymentService(DeploymentService):
-    """Base Service for a Corda Node (can be used for both nodes and notaries)
-
+    """Base service for a Corda Node
+    
     Args:
         first 11 args:
             passed to BaseService constructor (see above).
         firewall:
             If the node uses the Corda firewall.
-
+            
     """
     def __init__(self,
         abb: str,
@@ -280,6 +283,19 @@ class NodeDeploymentService(DeploymentService):
     def __repr__(self):
         return self.__str__()
 
+    def _notary(self) -> bool:
+        """Check if the [NodeDeploymentService] is a notary
+
+            Caution this only works for the default notary configured
+            in the [ServiceManager] from the hardcorded abb variable.
+
+            To implement this properly the [NodeDeploymentService] should
+            overload the __init__ method and pass in a notary boolean for
+            node services.
+
+        """
+        return self.abb == "notary"
+      
     def _construct_new_node_dir(self, new_dir, new_firewall):
         self.sysi.run(f'cp -r {self.dir} cenm-{new_dir}')
         if new_firewall:
@@ -322,12 +338,11 @@ class NodeDeploymentService(DeploymentService):
 
     def _register_node(self, artifact_name):
         self.logger.info('Registering node to the network')
+        self.sysi.wait_for_host_on_port(10000)
         exit_code = -1
         while exit_code != 0:
             self.logger.debug(f'[Running] (cd {self.dir} && java -jar {artifact_name}.jar initial-registration --network-root-truststore ./certificates/network-root-truststore.jks --network-root-truststore-password trustpass -f {self.config_file}) to start {self.artifact_name} service')
             exit_code = self.sysi.run_get_exit_code(f'(cd {self.dir} && java -jar {artifact_name}.jar initial-registration --network-root-truststore ./certificates/network-root-truststore.jks --network-root-truststore-password trustpass -f {self.config_file})')
-        self.logger.info(f'Sleeping for 2 minutes to allow registration to complete and for network parameters to be signed')
-        self.sysi.sleep(120)
 
     def _wait_for_bridge(self):
         while int(self.sysi.run_get_stdout('ps | grep -E ".*(cd corda-bridge.+\&\& java -jar).+(\.jar).+(\.conf).*" | wc -l | sed -e "s/^ *//g"')) == 0:
@@ -340,8 +355,14 @@ class NodeDeploymentService(DeploymentService):
 
         if not self._is_registered():
             self._register_node(artifact_name)
+            self.sysi.wait_for_host_on_port(20000)
+            # wait for network parameters to be signed
+            if self._notary():
+                self.sysi.sleep(90)
+          
         if self.firewall:
             self._wait_for_bridge()
+      
         while True:
             try:
                 self.logger.debug(f'[Running] (cd {self.dir} && java -jar {artifact_name}.jar -f {self.config_file}) to start {self.artifact_name} service')
