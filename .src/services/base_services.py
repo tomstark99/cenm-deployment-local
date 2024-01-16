@@ -242,6 +242,19 @@ class NodeDeploymentService(DeploymentService):
     def __repr__(self):
         return self.__str__()
 
+    def _notary(self) -> bool:
+        """Check if the [NodeDeploymentService] is a notary
+
+            Caution this only works for the default notary configured
+            in the [ServiceManager] from the hardcorded abb variable.
+
+            To implement this properly the [NodeDeploymentService] should
+            overload the __init__ method and pass in a notary boolean for
+            node services.
+
+        """
+        return self.abb == "notary"
+
     def _construct_new_node_dir(self, new_dir):
         self.sysi.run(f'cp -r {self.dir} cenm-{new_dir}')
         node_number = new_dir.split("-")[-1]
@@ -290,7 +303,8 @@ class NodeDeploymentService(DeploymentService):
             self._register_node(artifact_name)
             self.sysi.wait_for_host_on_port(20000)
             # wait for network parameters to be signed
-            self.sysi.sleep(90)
+            if self._notary():
+                self.sysi.sleep(90)
 
         while True:
             try:
