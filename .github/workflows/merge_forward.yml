@@ -1,0 +1,49 @@
+name: Create Merge Forward PRs
+
+on:
+  push:
+    branches:
+      - release/1.6
+
+jobs:
+  create_pull_request_postgres:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Install hub
+        run: |
+          sudo snap install hub --classic
+
+      - name: Setup Git
+        run: |
+          git config --global user.name 'merge-forward[bot]'
+          git config --global user.email 'merge-forward[bot]@users.noreply.github.com'
+        
+      - name: Create PR
+        run: |
+          git checkout -b merge-forward-postgres origin/release/1.6
+          git push origin merge-forward-postgres
+          hub pull-request -b release/postgres -h merge-forward-postgres -m "Merge forward updates release/1.6 -> release/postgres" || true
+
+  create_pull_request_firewall:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Install hub
+        run: |
+          sudo snap install hub --classic
+
+      - name: Setup Git
+        run: |
+          git config --global user.name 'merge-forward[bot]'
+          git config --global user.email 'merge-forward[bot]@users.noreply.github.com'
+        
+      - name: Create PR
+        run: |
+          git checkout -b merge-forward-firewall origin/release/1.6
+          git push origin merge-forward-firewall
+          hub pull-request -b release/firewall -h merge-forward-firewall -m "Merge forward updates release/1.6 -> release/firewall" || true
