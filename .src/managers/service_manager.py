@@ -145,7 +145,7 @@ class ServiceManager:
             certificates=   3)
         self.IDMAN_ANGEL = IdentityManagerAngelService(
             abb=            'idman-angel',
-            dir=            'idman',
+            dir=            'cenm-idman',
             artifact_name=  'angel',
             version=        cenm_version,
             ext=            'zip',
@@ -178,7 +178,7 @@ class ServiceManager:
             certificates=   4)
         self.NMAP_ANGEL = NetworkMapAngelService(
             abb=            'nmap-angel',
-            dir=            'nmap',
+            dir=            'cenm-nmap',
             artifact_name=  'angel',
             version=        cenm_version,
             ext=            'zip',
@@ -260,7 +260,7 @@ class ServiceManager:
             username=       username,
             password=       password,
             config_file=    'bridge.conf',
-            deployment_time=Constants.FIREWALL_DEPLOY_TIME.value,
+            deployment_time=self.deploy_time.FIREWALL_DEPLOY_TIME.value,
             certificates=   4)
         self.CORDA_FLOAT = CordaFirewallDeploymentService(
             abb=            'float',
@@ -272,7 +272,7 @@ class ServiceManager:
             username=       username,
             password=       password,
             config_file=    'float.conf',
-            deployment_time=Constants.FIREWALL_DEPLOY_TIME.value,
+            deployment_time=self.deploy_time.FIREWALL_DEPLOY_TIME.value,
             certificates=   2)
         self.ARTEMIS = ArtemisService(
             abb=            'artemis',
@@ -284,7 +284,7 @@ class ServiceManager:
             username=       username,
             password=       password,
             config_file=    None,
-            deployment_time=Constants.ARTEMIS_DEPLOY_TIME.value)
+            deployment_time=self.deploy_time.ARTEMIS_DEPLOY_TIME.value)
         self.PKI = PkiToolService(
             abb=            'pki',
             dir=            'cenm-pki',
