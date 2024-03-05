@@ -1,3 +1,4 @@
+import re
 from services.services import *
 from managers.config_manager import ConfigManager
 from managers.database_manager import DatabaseManager
@@ -70,6 +71,8 @@ class ServiceManager:
             self.deploy_time = DeployTimeConstants
         else:
             self.deploy_time = DeployTimeAngelConstants
+        self.cenm_java_version = self._get_cenm_java_version(cenm_version)
+        self.corda_java_version = self._get_corda_java_version(corda_version)
 
         self.AUTH = AuthService(
             abb=            'auth',
@@ -82,7 +85,8 @@ class ServiceManager:
             password=       password,
             config_file=    'auth.conf',
             deployment_time=self.deploy_time.AUTH_DEPLOY_TIME.value,
-            certificates=   2)
+            certificates=   2,
+            java_version=   self.cenm_java_version)
         self.CLIENT = AuthClientService(
             abb=            'client',
             dir=            'cenm-auth',
@@ -112,7 +116,8 @@ class ServiceManager:
             password=       password,
             config_file=    'gateway.conf',
             deployment_time=self.deploy_time.GATEWAY_DEPLOY_TIME.value,
-            certificates=   4)
+            certificates=   4,
+            java_version=   self.cenm_java_version)
         self.GATEWAY_PLUGIN = GatewayPluginService(
             abb=            'gateway-plugin',
             dir=            'cenm-gateway',
@@ -142,7 +147,8 @@ class ServiceManager:
             password=       password,
             config_file=    'identitymanager-init.conf',
             deployment_time=self.deploy_time.IDMAN_DEPLOY_TIME.value,
-            certificates=   3)
+            certificates=   3,
+            java_version=   self.cenm_java_version)
         self.IDMAN_ANGEL = IdentityManagerAngelService(
             abb=            'idman-angel',
             dir=            'cenm-idman',
@@ -154,7 +160,8 @@ class ServiceManager:
             password=       password,
             config_file=    'identitymanager-init.conf',
             deployment_time=self.deploy_time.ANGEL_DEPLOY_TIME.value,
-            certificates=   3)
+            certificates=   3,
+            java_version=   self.cenm_java_version)
         self.CRR_TOOL = CrrToolService(
             abb=            'crr-tool',
             dir=            'cenm-idman',
@@ -175,7 +182,8 @@ class ServiceManager:
             password=       password,
             config_file=    'networkmap-init.conf',
             deployment_time=self.deploy_time.NMAP_DEPLOY_TIME.value,
-            certificates=   4)
+            certificates=   4,
+            java_version=   self.cenm_java_version)
         self.NMAP_ANGEL = NetworkMapAngelService(
             abb=            'nmap-angel',
             dir=            'cenm-nmap',
@@ -187,7 +195,8 @@ class ServiceManager:
             password=       password,
             config_file=    'networkmap-init.conf',
             deployment_time=self.deploy_time.ANGEL_DEPLOY_TIME.value,
-            certificates=   4)
+            certificates=   4,
+            java_version=   self.cenm_java_version)
         self.NOTARY = NotaryService(
             abb=            'notary',
             dir=            'cenm-notary',
@@ -199,7 +208,8 @@ class ServiceManager:
             password=       password,
             config_file=    'notary.conf',
             deployment_time=self.deploy_time.NOTARY_DEPLOY_TIME.value,
-            certificates=   1)
+            certificates=   1,
+            java_version=   self.corda_java_version)
         self.NODE = NodeService(
             abb=            'node',
             dir=            'cenm-node',
@@ -211,7 +221,8 @@ class ServiceManager:
             password=       password,
             config_file=    'node.conf',
             deployment_time=self.deploy_time.NODE_DEPLOY_TIME.value,
-            certificates=   1)
+            certificates=   1,
+            java_version=   self.corda_java_version)
         self.FINANCE_CONTRACTS_CORDAPP = FinanceContractsCordapp(
             abb=            'finance-contracts',
             dir=            'cenm-node',
@@ -295,7 +306,8 @@ class ServiceManager:
             username=       username,
             password=       password,
             config_file=    'pki.conf',
-            deployment_time=None)
+            deployment_time=None,
+            java_version=   self.cenm_java_version)
         self.SIGNER = SignerService(
             abb=            'signer',
             dir=            'cenm-signer',
@@ -307,7 +319,8 @@ class ServiceManager:
             password=       password,
             config_file=    'signer.conf',
             deployment_time=self.deploy_time.SIGNER_DEPLOY_TIME.value,
-            certificates=   6)
+            certificates=   6,
+            java_version=   self.cenm_java_version)
         self.SIGNER_CA_PLUGIN = SignerPluginCAService(
             abb=            'signer-ca-plugin',
             dir=            'cenm-signer',
@@ -337,11 +350,30 @@ class ServiceManager:
             password=       password,
             config_file=    '',
             deployment_time=self.deploy_time.ZONE_DEPLOY_TIME.value,
-            certificates=   2)
+            certificates=   2,
+            java_version=   self.cenm_java_version)
 
         self.db_manager = DatabaseManager(self.get_database_services(), DownloadManager(username, password))
         self.config_manager = ConfigManager()
         self.deployment_manager = DeploymentManager(self.get_deployment_services(deploy_without_angel=deploy_without_angel))
+
+    def _get_cenm_java_version(self, version: str) -> int:
+        cenm_sub_version = re.findall(r'\.(\d+).?', version)[0]
+        if not cenm_sub_version:
+            return 8
+        elif int(cenm_sub_version) < 7:
+            return 8
+        else:
+            return 17
+
+    def _get_corda_java_version(self, version: str) -> int:
+        corda_sub_version = re.findall(r'\.(\d+).?', version)[0]
+        if not corda_sub_version:
+            return 8
+        elif int(corda_sub_version) < 12:
+            return 8
+        else:
+            return 17
 
     def _get_all_services(self, firewall: bool = False) -> List[BaseService]:
         """This is a list of all CENM services
