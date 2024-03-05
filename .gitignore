@@ -3,6 +3,7 @@ __pycache__
 
 # CENM folders
 cenm-*/
+corda-*/
 
 # args
 .env
