@@ -1,7 +1,8 @@
 import logging
 import os
 from enum import Enum
-from typing import List, Dict
+from typing import List, Dict, Optional
+from sys import platform
 import warnings
 import functools
 import uuid
@@ -42,6 +43,11 @@ class Constants(Enum):
         'notary_files': ["process-id", "network-parameters", "nodekeystore.jks", "truststore.jks", "sslkeystore.jks", "certificate-request-id.txt"],
         'angel_files': ["network-parameters.conf", "network-parameters.conf_bak", "networkmap.conf", "networkmap.conf_bak", "identitymanager.conf", "identitymanager.conf_bak", "token"]
     }
+
+class Platform(Enum):
+    LINUX = 'linux'
+    OSX = 'osx'
+    WINDOWS = 'windows'
 
 class DeployTimeConstants(Enum):
     ANGEL_DEPLOY_TIME = 5
@@ -143,6 +149,19 @@ class SystemInteract:
     """Class for using system commands
 
     """
+    def __init__(self):
+        self.platform = self._platform()
+
+    def _platform(self) -> Optional[str]:
+        if platform == "linux" or platform == "linux2":
+            return Platform.LINUX
+        elif platform == "darwin":
+            return Platform.OSX
+        elif platform == "win32":
+            return Platform.WINDOWS
+        else:
+            return None
+
     def path_exists(self, path: str) -> bool:
         """Checks a path exists
 
@@ -290,7 +309,8 @@ class SystemInteract:
                 The host to wait on, default is localhost.
 
         """
-        while self.run_get_exit_code(f'nc -z -G 3 {host} {port} > /dev/null 2>&1') != 0:
+        wait_code = "G" if self.platform == Platform.OSX else "w"
+        while self.run_get_exit_code(f'nc -z -{wait_code} 3 {host} {port} > /dev/null 2>&1') != 0:
             self.sleep(5)
         # Safety sleep to allow service on [port] to fully start
         self.sleep(10)
