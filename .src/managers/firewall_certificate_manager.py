@@ -2,6 +2,7 @@ from utils import SystemInteract, Logger, Constants
 from typing import List
 from services.base_services import DeploymentService
 import glob
+import re
 
 class FirewallCertificateError(Exception):
     def __init__(self, service, message):
@@ -19,10 +20,16 @@ class FirewallCertificateManager:
     def __init__(self):
         self.logger = Logger().get_logger(__name__)
         self.sysi = SystemInteract()
+        self.java_version = 17
+
+    def _java_string(self, java_version: int) -> str:
+        java_home = re.sub(r"\d+", str(java_version), self.sysi.run_get_stdout('echo $JAVA_HOME').strip())
+        return f'unset JAVA_HOME; export JAVA_HOME={java_home}'
 
     def _bridge(self):
         # artemis
         self.sysi.copy('corda-tools/artemis/artemis.jks', 'corda-bridge/artemis')
+        self.sysi.copy('corda-tools/artemis/artemisbridge.jks', 'corda-bridge/artemis')
         self.sysi.copy('corda-tools/artemis/artemis-truststore.jks', 'corda-bridge/artemis')
         # tunnel
         self.sysi.copy('corda-tools/tunnel/bridge.jks', 'corda-bridge/tunnel')
@@ -38,6 +45,7 @@ class FirewallCertificateManager:
         for node in existing_nodes:
             # artemis
             self.sysi.copy('corda-tools/artemis/artemis.jks', f'{node}/artemis')
+            self.sysi.copy('corda-tools/artemis/artemisnode.jks', f'{node}/artemis')
             self.sysi.copy('corda-tools/artemis/artemis-truststore.jks', f'{node}/artemis')
 
     def _distribute_certs(self):
@@ -48,11 +56,11 @@ class FirewallCertificateManager:
         
     def _generate_internal_tunnel_ssl_keystore(self):
         self.logger.info(f'Generating internal tunnel ssl keystore')
-        return self.sysi.run_get_exit_code(f'cd corda-tools && java -jar corda-tools-ha-utilities.jar generate-internal-tunnel-ssl-keystores -p tunnelStorePass -e tunnelPrivateKeyPassword -t tunnelTrustpass')
+        return self.sysi.run_get_exit_code(f'cd corda-tools && {self._java_string(self.java_version)} && java -jar corda-tools-ha-utilities.jar generate-internal-tunnel-ssl-keystores -p tunnelStorePass -e tunnelPrivateKeyPassword -t tunnelTrustpass --bridge-hsm-name PRIMUS_X --bridge-hsm-config-file securosys.conf --float-hsm-name PRIMUS_X --float-hsm-config-file securosys.conf')
     
     def _generate_internal_artemis_ssl_keystore(self):
         self.logger.info(f'Generating internal artemis ssl keystore')
-        return self.sysi.run_get_exit_code(f'cd corda-tools && java -jar corda-tools-ha-utilities.jar generate-internal-artemis-ssl-keystores -p artemisStorePass -t artemisTrustpass')
+        return self.sysi.run_get_exit_code(f'cd corda-tools && {self._java_string(self.java_version)} && java -jar corda-tools-ha-utilities.jar generate-internal-artemis-ssl-keystores -p artemisStorePass -t artemisTrustpass --bridge-hsm-name PRIMUS_X --bridge-hsm-config-file securosys.conf')
         
     def generate(self) -> int:
         certs = {}
