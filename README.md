@@ -1,5 +1,40 @@
 # cenm-deployment-local
 
+## &#9888; Important information for Java 17
+
+This branch supports an experimental implementation for deployments on multiple Java versions. As this is an experimental feature this may not work as intended unless the setup is followed correctly.
+
+### Java version setup
+
+This implementation works by un-setting and setting the `JAVA_HOME` env var per service that is deployed on a separate process. To alter the `JAVA_HOME` path correctly your Java versions need to be installed in the same folder with the same name pattern, e.g.
+
+```bash
+$ ls /Library/Java/JavaVirtualMachines
+zulu-8.jdk
+zulu-17.jdk
+```
+
+This follows the pattern `zulu-<java-version-number>.jdk`.
+
+You need to do this for all versions of Java that are required to run the services you need to deploy e.g. if you are running Java 8 services together with Java 17 services, you need to make sure both Java 8 and Java 17 JDK versions are installed with the correct naming convention before deploying.
+
+### `JAVA_HOME`
+
+before deploying please make sure that your `JAVA_HOME` is being set correctly in your `.bashrc` (or equivalent). You can check if this is already being done by running:
+
+```bash
+echo $JAVA_HOME
+/Library/Java/JavaVirtualMachines/zulu-8.jdk/Contents/Home
+```
+
+If this doesn't return anything then you need to add a line to your `.bashrc` corresponding to the java version you want to run by default in your terminal.
+
+```bash
+echo "export JAVA_HOME="/Library/Java/JavaVirtualMachines/<java-install-folder-name>/Contents/Home" >> .bashrc
+```
+
+## Introduction
+
 This is a complete Python framework for deploying an enterprise grade CENM deployment in a local environment for testing related purposes. This is the host repo to tie in separate CENM service config repos. Features of this framework include:
 
 - Download CENM artifacts, including plugins, database drivers and Corda node CorDapps
