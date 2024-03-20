@@ -30,7 +30,7 @@ echo $JAVA_HOME
 If this doesn't return anything then you need to add a line to your `.bashrc` corresponding to the java version you want to run by default in your terminal.
 
 ```bash
-echo "export JAVA_HOME="/Library/Java/JavaVirtualMachines/<java-install-folder-name>/Contents/Home" >> .bashrc
+echo "export JAVA_HOME='/Library/Java/JavaVirtualMachines/<java-install-folder-name>/Contents/Home'" >> .bashrc
 ```
 
 ## Introduction
