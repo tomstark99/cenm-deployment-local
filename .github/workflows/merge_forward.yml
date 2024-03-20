@@ -51,3 +51,26 @@ jobs:
           git checkout -b merge-forward-firewall origin/release/1.6
           git push origin merge-forward-firewall
           hub pull-request -b release/firewall -h merge-forward-firewall -m "Merge forward updates release/1.6 -> release/firewall" || true
+
+  create_pull_request_release_1_7:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Install hub
+        run: |
+          sudo snap install hub --classic
+
+      - name: Setup Git
+        run: |
+          git config --global user.name github-actions[bot]
+          git config --global user.email github-actions[bot]@users.noreply.github.com
+        
+      - name: Create PR
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: |
+          git checkout -b merge-forward-release/1.7 origin/release/1.6
+          git push origin merge-forward-release/1.7
+          hub pull-request -b release/1.7 -h merge-forward-release/1.7 -m "Merge forward updates release/1.6 -> release/1.7" || true
