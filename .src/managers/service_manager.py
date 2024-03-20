@@ -470,7 +470,7 @@ class ServiceManager:
         node_manager = self._get_node_manager()
         self.config_manager.validate(node_manager.new_nodes)
         self.PKI.validate_certificates(node_manager.new_nodes)
-        # node_manager.deploy_nodes(health_check_frequency)
+        node_manager.deploy_nodes(health_check_frequency)
 
     def generate_certificates(self):
         self.check_all()
