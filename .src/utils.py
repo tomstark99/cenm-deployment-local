@@ -84,7 +84,7 @@ class Logger:
     def _set_logging_config(self, logger_name: str, log_file: str, level=logging.DEBUG):
         logger = logging.getLogger(logger_name)
 
-        fileHandler = logging.FileHandler(log_file, mode='w')
+        fileHandler = logging.FileHandler(log_file, mode='a')
         fileHandler.setFormatter(self.formatter)
 
         streamHandler = logging.StreamHandler()
