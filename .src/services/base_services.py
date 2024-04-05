@@ -1,13 +1,12 @@
 import os
+import glob
+import uuid
+import multiprocessing
 from abc import ABC
 from pyhocon import ConfigFactory
 from managers.download_manager import DownloadManager
-from utils import SystemInteract, Logger, Constants
+from utils import SystemInteract, Logger, Constants, java_string
 from time import sleep
-import multiprocessing
-import glob
-import uuid
-import re
 
 class BaseService(ABC):
     """Base service for all services to inherit.
@@ -191,20 +190,16 @@ class DeploymentService(BaseService):
     def __repr__(self):
         return self.__str__()
 
-    def _get_cert_count(self) -> bool:
+    def _get_cert_count(self) -> int:
         cert_count = self.sysi.run_get_stdout(f"ls {self.dir}/certificates | xargs | wc -w | sed -e 's/^ *//g'")
         return int(cert_count)
-
-    def _java_string(self, java_version: int) -> str:
-        java_home = re.sub(r"\d+", str(java_version), self.sysi.run_get_stdout('echo $JAVA_HOME').strip())
-        return f'unset JAVA_HOME; export JAVA_HOME={java_home}'
         
     def deploy(self):
         self.logger.info(f'Thread started to deploy {self.artifact_name}')
         while True:
             try:
-                self.logger.debug(f'[Running] (cd {self.dir} && {self._java_string(self.java_version)} && java -jar {self.artifact_name}.jar -f {self.config_file}) to start {self.artifact_name} service')
-                exit_code = self.sysi.run_get_exit_code(f'(cd {self.dir} && {self._java_string(self.java_version)} && java -jar {self.artifact_name}.jar -f {self.config_file})')
+                self.logger.debug(f'[Running] (cd {self.dir} && {java_string(self.java_version)} && java -jar {self.artifact_name}.jar -f {self.config_file}) to start {self.artifact_name} service')
+                exit_code = self.sysi.run_get_exit_code(f'(cd {self.dir} && {java_string(self.java_version)} && java -jar {self.artifact_name}.jar -f {self.config_file})')
                 if exit_code != 0:
                     raise RuntimeError(f'{self.artifact_name} service stopped')
             except:
@@ -353,8 +348,8 @@ class NodeDeploymentService(DeploymentService):
         self.sysi.wait_for_host_on_port(10000)
         exit_code = -1
         while exit_code != 0:
-            self.logger.debug(f'[Running] (cd {self.dir} && {self._java_string(self.java_version)} && java -jar {artifact_name}.jar initial-registration --network-root-truststore ./certificates/network-root-truststore.jks --network-root-truststore-password trustpass -f {self.config_file}) to start {self.artifact_name} service')
-            exit_code = self.sysi.run_get_exit_code(f'(cd {self.dir} && {self._java_string(self.java_version)} && java -jar {artifact_name}.jar initial-registration --network-root-truststore ./certificates/network-root-truststore.jks --network-root-truststore-password trustpass -f {self.config_file})')
+            self.logger.debug(f'[Running] (cd {self.dir} && {java_string(self.java_version)} && java -jar {artifact_name}.jar initial-registration --network-root-truststore ./certificates/network-root-truststore.jks --network-root-truststore-password trustpass -f {self.config_file}) to start {self.artifact_name} service')
+            exit_code = self.sysi.run_get_exit_code(f'(cd {self.dir} && {java_string(self.java_version)} && java -jar {artifact_name}.jar initial-registration --network-root-truststore ./certificates/network-root-truststore.jks --network-root-truststore-password trustpass -f {self.config_file})')
 
     def _wait_for_bridge(self):
         while int(self.sysi.run_get_stdout('ps | grep -E ".*(cd corda-bridge.+\&\& java -jar).+(\.jar).+(\.conf).*" | wc -l | sed -e "s/^ *//g"')) == 0:
@@ -377,8 +372,8 @@ class NodeDeploymentService(DeploymentService):
       
         while True:
             try:
-                self.logger.debug(f'[Running] (cd {self.dir} && {self._java_string(self.java_version)} && java -jar {artifact_name}.jar -f {self.config_file}) to start {self.artifact_name} service')
-                exit_code = self.sysi.run_get_exit_code(f'(cd {self.dir} && {self._java_string(self.java_version)} && java -jar {artifact_name}.jar -f {self.config_file})')
+                self.logger.debug(f'[Running] (cd {self.dir} && {java_string(self.java_version)} && java -jar {artifact_name}.jar -f {self.config_file}) to start {self.artifact_name} service')
+                exit_code = self.sysi.run_get_exit_code(f'(cd {self.dir} && {java_string(self.java_version)} && java -jar {artifact_name}.jar -f {self.config_file})')
                 if exit_code != 0:
                     raise RuntimeError(f'{self.artifact_name} service stopped')
             except:
@@ -403,7 +398,7 @@ class CordaFirewallDeploymentService(DeploymentService):
             self.logger.info('Waiting for network-parameters file to be created')
             sleep(5)
 
-    def _wait_for_network_params(self) -> bool:
+    def _get_cert_count(self) -> int:
         cert_count_1 = self.sysi.run_get_stdout(f"ls {self.dir}/artemis | xargs | wc -w | sed -e 's/^ *//g'")
         cert_count_2 = self.sysi.run_get_stdout(f"ls {self.dir}/tunnel | xargs | wc -w | sed -e 's/^ *//g'")
         return int(cert_count_1)+int(cert_count_2)
@@ -412,11 +407,11 @@ class CordaFirewallDeploymentService(DeploymentService):
         artifact_name = f'{self.artifact_name}-{self.version}'
 
         self.logger.info(f'Thread started to deploy {self.artifact_name}')
-        self._wait_for_certs()
+        self._wait_for_network_params()
         while True:
             try:
-                self.logger.debug(f'[Running] (cd {self.dir} && java -jar {artifact_name}.jar -f {self.config_file}) to start {self.artifact_name} service')
-                exit_code = self.sysi.run_get_exit_code(f'(cd {self.dir} && java -jar {artifact_name}.jar -f {self.config_file})')
+                self.logger.debug(f'[Running] (cd {self.dir} && {java_string(self.java_version)} && java -jar {artifact_name}.jar -f {self.config_file}) to start {self.artifact_name} service')
+                exit_code = self.sysi.run_get_exit_code(f'(cd {self.dir} && {java_string(self.java_version)} && java -jar {artifact_name}.jar -f {self.config_file})')
                 if exit_code != 0:
                     raise RuntimeError(f'{self.artifact_name} service stopped')
             except:

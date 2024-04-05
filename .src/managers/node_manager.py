@@ -84,7 +84,7 @@ class NodeManager:
                 java_processes = _get_processes()
 
     def _setup_firewall(self):
-        firewall_tool = FirewallTool(f'{self.base_node.artifact_name}-{self.base_node.version}')
+        firewall_tool = FirewallTool(self.base_node.artifact_name, self.base_node.version)
         firewall_tool.setup_firewall()
 
     def deploy_nodes(self, health_check_frequency: int):

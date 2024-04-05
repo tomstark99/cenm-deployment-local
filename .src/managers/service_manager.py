@@ -71,8 +71,9 @@ class ServiceManager:
             self.deploy_time = DeployTimeConstants
         else:
             self.deploy_time = DeployTimeAngelConstants
-        self.cenm_java_version = self._get_cenm_java_version(cenm_version)
-        self.corda_java_version = self._get_corda_java_version(corda_version)
+        self.cenm_java_version = get_cenm_java_version(cenm_version)
+        self.corda_java_version = get_corda_java_version(corda_version)
+        self.artemis_version = get_artemis_version(corda_version)
 
         self.AUTH = AuthService(
             abb=            'auth',
@@ -260,7 +261,8 @@ class ServiceManager:
             username=       username,
             password=       password,
             config_file=    None,
-            deployment_time=None)
+            deployment_time=None,
+            java_version=   self.corda_java_version)
         self.CORDA_BRIDGE = CordaFirewallDeploymentService(
             abb=            'bridge',
             dir=            'corda-bridge',
@@ -272,7 +274,8 @@ class ServiceManager:
             password=       password,
             config_file=    'bridge.conf',
             deployment_time=self.deploy_time.FIREWALL_DEPLOY_TIME.value,
-            certificates=   4)
+            certificates=   4,
+            java_version=   self.corda_java_version)
         self.CORDA_FLOAT = CordaFirewallDeploymentService(
             abb=            'float',
             dir=            'corda-float',
@@ -284,18 +287,20 @@ class ServiceManager:
             password=       password,
             config_file=    'float.conf',
             deployment_time=self.deploy_time.FIREWALL_DEPLOY_TIME.value,
-            certificates=   2)
+            certificates=   2,
+            java_version=   self.corda_java_version)
         self.ARTEMIS = ArtemisService(
             abb=            'artemis',
             dir=            'corda-artemis',
-            artifact_name=  'apache-artemis-2.6.3-bin',
-            version=        Constants.ARTEMIS_VERSION.value,
+            artifact_name=  f'apache-artemis-{self.artemis_version}-bin',
+            version=        self.artemis_version,
             ext=            'zip',
             url=            Constants.ARTEMIS_URL.value,
             username=       username,
             password=       password,
             config_file=    None,
-            deployment_time=self.deploy_time.ARTEMIS_DEPLOY_TIME.value)
+            deployment_time=self.deploy_time.ARTEMIS_DEPLOY_TIME.value,
+            java_version=   self.corda_java_version)
         self.PKI = PkiToolService(
             abb=            'pki',
             dir=            'cenm-pki',
@@ -356,24 +361,6 @@ class ServiceManager:
         self.db_manager = DatabaseManager(self.get_database_services(), DownloadManager(username, password))
         self.config_manager = ConfigManager()
         self.deployment_manager = DeploymentManager(self.get_deployment_services(deploy_without_angel=deploy_without_angel))
-
-    def _get_cenm_java_version(self, version: str) -> int:
-        cenm_sub_version = re.findall(r'\.(\d+).?', version)[0]
-        if not cenm_sub_version:
-            return 8
-        elif int(cenm_sub_version) < 7:
-            return 8
-        else:
-            return 17
-
-    def _get_corda_java_version(self, version: str) -> int:
-        corda_sub_version = re.findall(r'\.(\d+).?', version)[0]
-        if not corda_sub_version:
-            return 8
-        elif int(corda_sub_version) < 12:
-            return 8
-        else:
-            return 17
 
     def _get_all_services(self, firewall: bool = False) -> List[BaseService]:
         """This is a list of all CENM services
@@ -545,9 +532,9 @@ class ServiceManager:
         node_manager = self._get_node_manager(firewall)
         self.config_manager.validate(node_manager.new_nodes)
         self.PKI.validate_certificates(node_manager.new_nodes)
-        # if firewall:
-        #     self.CORDA_HA_TOOLS.validate_certificates([self.CORDA_BRIDGE, self.CORDA_FLOAT])
-        # node_manager.deploy_nodes(health_check_frequency)
+        if firewall:
+            self.CORDA_HA_TOOLS.validate_certificates([self.CORDA_BRIDGE, self.CORDA_FLOAT])
+        node_manager.deploy_nodes(health_check_frequency)
 
     def generate_certificates(self, firewall):
         self.check_all(firewall)
@@ -575,7 +562,6 @@ class ServiceManager:
                 clean_runtime
             )
         else:
-            self.sysi.remove(".logs/*", silent=True)
             services = [*self.get_deployment_services(deploy_without_angel=self.deploy_without_angel), *self.get_firewall_services(), self.NODE, self.PKI] if clean_firewall else [*self.get_deployment_services(deploy_without_angel=self.deploy_without_angel), self.NODE, self.PKI]
             for service in services:
                 if clean_deep:
@@ -587,6 +573,7 @@ class ServiceManager:
                     service.clean_certificates()
                 if clean_runtime:
                     service.clean_runtime()
+            self.sysi.remove(".logs/*", silent=True)
 
     def clean_specific_artifacts(self, services: List[str]):
         print("Cleaning individual artifacts does not work with any other arguments, script will exit after downloading.")

@@ -2,7 +2,7 @@ from pyhocon import ConfigFactory
 from services.base_services import *
 from managers.certificate_manager import CertificateManager
 from managers.firewall_certificate_manager import FirewallCertificateManager
-from utils import Constants
+from utils import Constants, java_string
 from typing import List
 from time import sleep
 import glob
@@ -373,7 +373,7 @@ class ArtemisService(DeploymentService):
         return self.sysi.path_exists(f'{self.dir}/artemis-master')
 
     def _configure_artemis(self):
-        self.sysi.run(f'cd corda-tools && java -jar corda-tools-ha-utilities.jar configure-artemis --install --distribution ../corda-artemis/apache-artemis-{self.version} --path ../corda-artemis/artemis-master --user "CN=artemis, O=Corda, L=London, C=GB" --ha MASTER --acceptor-address localhost:11005 --keystore ./artemis/artemis.jks --keystore-password artemisStorePass --truststore ./artemis/artemis-truststore.jks --truststore-password artemisTrustpass --connectors localhost:11005')
+        self.sysi.run(f'cd corda-tools && {java_string(self.java_version)} && java -jar corda-tools-ha-utilities.jar configure-artemis --install --distribution ../corda-artemis/apache-artemis-{self.version} --path ../corda-artemis/artemis-master --user "CN=artemis, O=Corda, L=London, C=GB" --ha MASTER --acceptor-address localhost:11005 --keystore ./artemis/artemis.jks --keystore-password artemisStorePass --truststore ./artemis/artemis-truststore.jks --truststore-password artemisTrustpass --connectors localhost:11005')
 
     def _copy_keystores(self):
         self.sysi.run('mkdir -p corda-artemis/artemis-master/etc/artemis', silent=True)

@@ -1,4 +1,4 @@
-from utils import SystemInteract, Logger, Constants
+from utils import SystemInteract, Logger, Constants, java_string
 from typing import List
 from services.base_services import DeploymentService
 import glob
@@ -21,10 +21,6 @@ class FirewallCertificateManager:
         self.logger = Logger().get_logger(__name__)
         self.sysi = SystemInteract()
         self.java_version = 17
-
-    def _java_string(self, java_version: int) -> str:
-        java_home = re.sub(r"\d+", str(java_version), self.sysi.run_get_stdout('echo $JAVA_HOME').strip())
-        return f'unset JAVA_HOME; export JAVA_HOME={java_home}'
 
     def _bridge(self):
         # artemis
@@ -56,11 +52,11 @@ class FirewallCertificateManager:
         
     def _generate_internal_tunnel_ssl_keystore(self):
         self.logger.info(f'Generating internal tunnel ssl keystore')
-        return self.sysi.run_get_exit_code(f'cd corda-tools && {self._java_string(self.java_version)} && java -jar corda-tools-ha-utilities.jar generate-internal-tunnel-ssl-keystores -p tunnelStorePass -e tunnelPrivateKeyPassword -t tunnelTrustpass --bridge-hsm-name PRIMUS_X --bridge-hsm-config-file securosys.conf --float-hsm-name PRIMUS_X --float-hsm-config-file securosys.conf')
+        return self.sysi.run_get_exit_code(f'cd corda-tools && {java_string(self.java_version)} && java -jar corda-tools-ha-utilities.jar generate-internal-tunnel-ssl-keystores -p tunnelStorePass -e tunnelPrivateKeyPassword -t tunnelTrustpass')
     
     def _generate_internal_artemis_ssl_keystore(self):
         self.logger.info(f'Generating internal artemis ssl keystore')
-        return self.sysi.run_get_exit_code(f'cd corda-tools && {self._java_string(self.java_version)} && java -jar corda-tools-ha-utilities.jar generate-internal-artemis-ssl-keystores -p artemisStorePass -t artemisTrustpass --bridge-hsm-name PRIMUS_X --bridge-hsm-config-file securosys.conf')
+        return self.sysi.run_get_exit_code(f'cd corda-tools && {java_string(self.java_version)} && java -jar corda-tools-ha-utilities.jar generate-internal-artemis-ssl-keystores -p artemisStorePass -t artemisTrustpass')
         
     def generate(self) -> int:
         certs = {}

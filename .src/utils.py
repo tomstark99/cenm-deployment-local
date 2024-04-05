@@ -1,12 +1,13 @@
-import logging
 import os
+import re
+import glob
+import uuid
+import logging
+import warnings
+import functools
 from enum import Enum
 from typing import List, Dict
 from time import sleep
-import warnings
-import functools
-import uuid
-import glob
 
 def deprecated(func):
     """This is a decorator which can be used to mark functions
@@ -28,7 +29,6 @@ class Constants(Enum):
     BASE_URL = 'https://software.r3.com/artifactory'
     GITHUB_URL = 'https://github.com/tomstark99'
     ARTEMIS_URL = 'https://archive.apache.org/dist/activemq/activemq-artemis'
-    ARTEMIS_VERSION = '2.6.3'
     EXT_PACKAGE = 'extensions-lib-release-local/com/r3/appeng'
     ENM_PACKAGE = 'r3-enterprise-network-manager/com/r3/enm'
     CORDA_PACKAGE = 'r3-corda-releases/com/r3/corda'
@@ -78,6 +78,37 @@ class DeployTimeAngelConstants(Enum):
     NODE_DEPLOY_TIME = 30
     FIREWALL_DEPLOY_TIME = 20
     ARTEMIS_DEPLOY_TIME = 10
+
+def get_cenm_java_version(version: str) -> int:
+    cenm_sub_version = re.findall(r'\.(\d+).?', version)[0]
+    if not cenm_sub_version:
+        return 8
+    elif int(cenm_sub_version) < 7:
+        return 8
+    else:
+        return 17
+
+def get_corda_java_version(version: str) -> int:
+    corda_sub_version = re.findall(r'\.(\d+).?', version)[0]
+    if not corda_sub_version:
+        return 8
+    elif int(corda_sub_version) < 12:
+        return 8
+    else:
+        return 17
+
+def get_artemis_version(version: str) -> str:
+    corda_sub_version = re.findall(r'\.(\d+).?', version)[0]
+    if not corda_sub_version:
+        return 8
+    elif int(corda_sub_version) < 12:
+        return "2.6.3"
+    else:
+        return "2.29.0"
+
+def java_string(java_version: int) -> str:
+    java_home = re.sub(r"\d+", str(java_version), SystemInteract().run_get_stdout('echo $JAVA_HOME').strip())
+    return f'unset JAVA_HOME; export JAVA_HOME={java_home}'
     
 # TODO: Logger needs an overhaul
 class Logger:
@@ -324,17 +355,18 @@ class SystemInteract:
 
 class FirewallTool:
 
-    def __init__(self, artifact_name: str):
+    def __init__(self, artifact_name: str, artifact_version: str): 
         self.sysi = SystemInteract()
         self.logger = Logger().get_logger(__name__)
-        self.artifact_name = artifact_name
+        self.artifact_name = f'{artifact_name}-{artifact_version}'
+        self.java_version = get_corda_java_version(artifact_version)
         self.nodes = glob.glob('cenm-node-*')
 
     def _get_node_networkparameters(self):
         self.logger.info('Getting network parameters')
         node_dir = self.nodes[0]
-        self.logger.debug(f'[Running] timeout 30 bash -c "cd {node_dir} && java -jar {self.artifact_name}.jar -f node.conf" to get network parameters')
-        self.sysi.run(f'timeout 30 bash -c "cd {node_dir} && java -jar {self.artifact_name}.jar -f node.conf"')
+        self.logger.debug(f'[Running] timeout 30 bash -c "cd {node_dir} && {java_string(self.java_version)} && java -jar {self.artifact_name}.jar -f node.conf" to get network parameters')
+        self.sysi.run(f'timeout 30 bash -c "cd {node_dir} && {java_string(self.java_version)} && java -jar {self.artifact_name}.jar -f node.conf"')
         self.logger.info('Terminated corda process that was started to get network parameters')
     
     def _wait_for_ssl_keys(self):
@@ -344,13 +376,16 @@ class FirewallTool:
             self.logger.info('Waiting for ssl keys to be generated')
             exists = [self.sysi.path_exists(f'{node_dir}/certificates/sslkeystore.jks') for node_dir in self.nodes]
             present = all(exists)
-            sleep(5)
+            self.sysi.sleep(5)
+        # Safety sleep to allow nodes to run database migration scripts
+        self.sysi.sleep(10)
+        
 
     def _import_ssl_key(self):
         self.logger.info('Importing ssl key')
         cmd = f'java -jar corda-tools-ha-utilities.jar import-ssl-key --bridge-keystore-password=bridgeKeyStorePassword --bridge-keystore=./nodesCertificates/nodesUnitedSslKeystore.jks ' + ''.join([f'--node-keystores=../{node_dir}/certificates/sslkeystore.jks --node-keystore-passwords=cordacadevpass ' for node_dir in self.nodes])
         self.logger.info(f'[Running] {cmd}')
-        self.sysi.run(f'cd corda-tools && {cmd}')
+        self.sysi.run(f'cd corda-tools && {java_string(self.java_version)} && {cmd}')
     
     def _copy_firewall_files(self):
         node_dir = self.nodes[0]
