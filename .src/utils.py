@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 from enum import Enum
 from typing import List, Dict, Optional
 from sys import platform
@@ -72,7 +73,29 @@ class DeployTimeAngelConstants(Enum):
 
     NOTARY_DEPLOY_TIME = 5
     NODE_DEPLOY_TIME = 30
-    
+
+def java_string(java_version: int) -> str:
+    java_home = re.sub(r"\d+", str(java_version), SystemInteract().run_get_stdout('echo $JAVA_HOME').strip())
+    return f'unset JAVA_HOME; export JAVA_HOME={java_home}'
+
+def get_cenm_java_version(version: str) -> int:
+    cenm_sub_version = re.findall(r'\.(\d+).?', version)[0]
+    if not cenm_sub_version:
+        return 8
+    elif int(cenm_sub_version) < 7:
+        return 8
+    else:
+        return 17
+
+def get_corda_java_version(version: str) -> int:
+    corda_sub_version = re.findall(r'\.(\d+).?', version)[0]
+    if not corda_sub_version:
+        return 8
+    elif int(corda_sub_version) < 12:
+        return 8
+    else:
+        return 17
+
 # TODO: Logger needs an overhaul
 class Logger:
     """Logger management
@@ -327,11 +350,12 @@ class CenmTool:
         self.host = 'http://127.0.0.1:8089'
         self.path = 'cenm-gateway/cenm-tool'
         self.jar = f'cenm-tool-{nms_visual_version}.jar'
+        self.java_version = get_cenm_java_version(nms_visual_version)
         self.sysi = SystemInteract()
 
     def _run(self, cmd: str):
         print(f'Running: {cmd}')
-        return self.sysi.run_get_stdout(f'(cd {self.path} && java -jar {self.jar} {cmd})')
+        return self.sysi.run_get_stdout(f'(cd {self.path} && {java_string(self.java_version)} && java -jar {self.jar} {cmd})')
 
     def _login(self, username: str, password: str):
         self._run(f'context login -s {self.host} -u {username} -p {password}')

@@ -1,4 +1,3 @@
-import re
 from services.services import *
 from managers.config_manager import ConfigManager
 from managers.database_manager import DatabaseManager
@@ -71,8 +70,8 @@ class ServiceManager:
             self.deploy_time = DeployTimeConstants
         else:
             self.deploy_time = DeployTimeAngelConstants
-        self.cenm_java_version = self._get_cenm_java_version(cenm_version)
-        self.corda_java_version = self._get_corda_java_version(corda_version)
+        self.cenm_java_version = get_cenm_java_version(cenm_version)
+        self.corda_java_version = get_corda_java_version(corda_version)
 
         self.AUTH = AuthService(
             abb=            'auth',
@@ -311,24 +310,6 @@ class ServiceManager:
         self.config_manager = ConfigManager()
         self.deployment_manager = DeploymentManager(self.get_deployment_services(deploy_without_angel=deploy_without_angel))
 
-    def _get_cenm_java_version(self, version: str) -> int:
-        cenm_sub_version = re.findall(r'\.(\d+).?', version)[0]
-        if not cenm_sub_version:
-            return 8
-        elif int(cenm_sub_version) < 7:
-            return 8
-        else:
-            return 17
-
-    def _get_corda_java_version(self, version: str) -> int:
-        corda_sub_version = re.findall(r'\.(\d+).?', version)[0]
-        if not corda_sub_version:
-            return 8
-        elif int(corda_sub_version) < 12:
-            return 8
-        else:
-            return 17
-
     def _get_all_services(self) -> List[BaseService]:
         return [
             self.AUTH,
@@ -493,7 +474,6 @@ class ServiceManager:
                 clean_runtime
             )
         else:
-            self.sysi.remove(".logs/*", silent=True)
             for service in [*self.get_deployment_services(deploy_without_angel=self.deploy_without_angel), self.NODE, self.PKI]:
                 if clean_deep:
                     service.clean_all()
@@ -504,6 +484,7 @@ class ServiceManager:
                     service.clean_certificates()
                 if clean_runtime:
                     service.clean_runtime()
+            self.sysi.remove(".logs/*", silent=True)
 
     def clean_specific_artifacts(self, services: List[str]):
         print("Cleaning individual artifacts does not work with any other arguments, script will exit after downloading.")
