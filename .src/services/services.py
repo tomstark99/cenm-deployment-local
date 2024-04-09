@@ -320,7 +320,7 @@ class PkiToolService(DeploymentService):
         return self.error
 
     def deploy(self):
-        cert_manager = CertificateManager()
+        cert_manager = CertificateManager(self.version)
         exit_code = -1
         try:
             while exit_code != 0:
@@ -330,7 +330,7 @@ class PkiToolService(DeploymentService):
             exit(1)
 
     def validate_certificates(self, services: List[DeploymentService]):
-        cert_manager = CertificateManager()
+        cert_manager = CertificateManager(self.version)
         cert_manager.validate(services)
 
     def validate_config(self) -> str:

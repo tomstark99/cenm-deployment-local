@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 from enum import Enum
 from typing import List, Dict
 import warnings
@@ -329,6 +330,7 @@ class CenmTool:
         self.host = 'http://127.0.0.1:8089'
         self.path = 'cenm-gateway/cenm-tool'
         self.jar = f'cenm-tool-{nms_visual_version}.jar'
+        self.java_version = get_cenm_java_version(nms_visual_version)
         self.sysi = SystemInteract()
 
     def _run(self, cmd: str):
