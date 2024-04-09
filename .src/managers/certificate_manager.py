@@ -106,7 +106,7 @@ class CertificateManager:
 
         if not all(certs.values()):
             print('Generating certificates')
-            exits.append(self.sysi.run_get_exit_code(f'(cd cenm-pki && java -jar pkitool.jar -f pki.conf)'))
+            exits.append(self.sysi.run_get_exit_code(f'(cd cenm-pki && {java_string(self.java_version)} && java -jar pkitool.jar -f pki.conf)'))
         self._distribute_certs()
         return max(exits)
 

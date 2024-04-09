@@ -1,6 +1,7 @@
 from pyhocon import ConfigFactory
 from services.base_services import BaseService, SignerPluginService, CordappService, DeploymentService, NodeDeploymentService
 from managers.certificate_manager import CertificateManager
+from utils import java_string
 from typing import List
 from time import sleep
 import glob
@@ -20,8 +21,8 @@ class AuthService(DeploymentService):
         artifact_name = f'{self.artifact_name}-{self.version}'
         while True:
             try:
-                self.logger.debug(f'[Running] (cd {self.dir} && java -jar {artifact_name}.jar -f {self.config_file} --initial-user-name admin --initial-user-password p4ssWord --keep-running --verbose) to start {self.artifact_name} service')
-                exit_code = self.sysi.run_get_exit_code(f'(cd {self.dir} && java -jar {artifact_name}.jar -f {self.config_file} --initial-user-name admin --initial-user-password p4ssWord --keep-running --verbose)')
+                self.logger.debug(f'[Running] (cd {self.dir} && {java_string(self.java_version)} && java -jar {artifact_name}.jar -f {self.config_file} --initial-user-name admin --initial-user-password p4ssWord --keep-running --verbose) to start {self.artifact_name} service')
+                exit_code = self.sysi.run_get_exit_code(f'(cd {self.dir} && {java_string(self.java_version)} && java -jar {artifact_name}.jar -f {self.config_file} --initial-user-name admin --initial-user-password p4ssWord --keep-running --verbose)')
                 if exit_code != 0:
                     raise RuntimeError(f'{self.artifact_name} service stopped')
             except:
@@ -72,8 +73,8 @@ class GatewayService(DeploymentService):
         artifact_name = f'{self.artifact_name}-{self.version}'
         while True:
             try:
-                self.logger.debug(f'[Running] (cd {self.dir}/private && java -jar {artifact_name}.jar -f {self.config_file}) to start {self.artifact_name} service')
-                exit_code = self.sysi.run_get_exit_code(f'(cd {self.dir}/private && java -jar {artifact_name}.jar -f {self.config_file})')
+                self.logger.debug(f'[Running] (cd {self.dir}/private && {java_string(self.java_version)} && java -jar {artifact_name}.jar -f {self.config_file}) to start {self.artifact_name} service')
+                exit_code = self.sysi.run_get_exit_code(f'(cd {self.dir}/private && {java_string(self.java_version)} && java -jar {artifact_name}.jar -f {self.config_file})')
                 if exit_code != 0:
                     raise RuntimeError(f'{self.artifact_name} service stopped')
             except:
@@ -152,12 +153,12 @@ class IdentityManagerAngelService(IdentityManagerService):
         token = self.sysi.run_get_stdout(f'(cd {self.dir} && head -1 token)').strip()
         # TODO: duplicated, remove before commit
         print(f'Identity Manager token: {token}')
-        print(f'[Running] (cd {self.dir} && java -jar {self.artifact_name}.jar --jar-name=identitymanager.jar --zone-host=127.0.0.1 --zone-port=5061 --token={token} --service=IDENTITY_MANAGER --polling-interval=10 --working-dir=./ --tls=true --tls-keystore=./certificates/corda-ssl-identity-manager-keys.jks --tls-keystore-password=password --tls-truststore=./certificates/corda-ssl-trust-store.jks --tls-truststore-password=trustpass --verbose)')
+        print(f'[Running] (cd {self.dir} && {java_string(self.java_version)} && java -jar {self.artifact_name}.jar --jar-name=identitymanager.jar --zone-host=127.0.0.1 --zone-port=5061 --token={token} --service=IDENTITY_MANAGER --polling-interval=10 --working-dir=./ --tls=true --tls-keystore=./certificates/corda-ssl-identity-manager-keys.jks --tls-keystore-password=password --tls-truststore=./certificates/corda-ssl-trust-store.jks --tls-truststore-password=trustpass --verbose)')
 
         while True:
             try:
-                self.logger.debug(f'[Running] (cd {self.dir} && java -jar {self.artifact_name}.jar --jar-name=identitymanager.jar --zone-host=127.0.0.1 --zone-port=5061 --token={token} --service=IDENTITY_MANAGER --polling-interval=10 --working-dir=./ --tls=true --tls-keystore=./certificates/corda-ssl-identity-manager-keys.jks --tls-keystore-password=password --tls-truststore=./certificates/corda-ssl-trust-store.jks --tls-truststore-password=trustpass --verbose)')
-                exit_code = self.sysi.run_get_exit_code(f'(cd {self.dir} && java -jar {self.artifact_name}.jar --jar-name=identitymanager.jar --zone-host=127.0.0.1 --zone-port=5061 --token={token} --service=IDENTITY_MANAGER --polling-interval=10 --working-dir=./ --tls=true --tls-keystore=./certificates/corda-ssl-identity-manager-keys.jks --tls-keystore-password=password --tls-truststore=./certificates/corda-ssl-trust-store.jks --tls-truststore-password=trustpass --verbose)')
+                self.logger.debug(f'[Running] (cd {self.dir} && {java_string(self.java_version)} && java -jar {self.artifact_name}.jar --jar-name=identitymanager.jar --zone-host=127.0.0.1 --zone-port=5061 --token={token} --service=IDENTITY_MANAGER --polling-interval=10 --working-dir=./ --tls=true --tls-keystore=./certificates/corda-ssl-identity-manager-keys.jks --tls-keystore-password=password --tls-truststore=./certificates/corda-ssl-trust-store.jks --tls-truststore-password=trustpass --verbose)')
+                exit_code = self.sysi.run_get_exit_code(f'(cd {self.dir} && {java_string(self.java_version)} && java -jar {self.artifact_name}.jar --jar-name=identitymanager.jar --zone-host=127.0.0.1 --zone-port=5061 --token={token} --service=IDENTITY_MANAGER --polling-interval=10 --working-dir=./ --tls=true --tls-keystore=./certificates/corda-ssl-identity-manager-keys.jks --tls-keystore-password=password --tls-truststore=./certificates/corda-ssl-trust-store.jks --tls-truststore-password=trustpass --verbose)')
                 if exit_code != 0:
                     raise RuntimeError(f'{self.artifact_name} service stopped')
             except:
@@ -213,7 +214,7 @@ class NetworkMapService(DeploymentService):
         
     def _set_network_params(self):
         self.logger.info(f'Setting network parameters')
-        self.sysi.run(f'cd {self.dir} && java -jar networkmap.jar -f networkmap-init.conf --set-network-parameters network-parameters-init.conf --network-truststore ./certificates/network-root-truststore.jks --truststore-password trustpass --root-alias cordarootca')
+        self.sysi.run(f'cd {self.dir} && {java_string(self.java_version)} && java -jar networkmap.jar -f networkmap-init.conf --set-network-parameters network-parameters-init.conf --network-truststore ./certificates/network-root-truststore.jks --truststore-password trustpass --root-alias cordarootca')
 
     def clean_runtime(self):
         for root, dirs, files in os.walk(self.dir):
@@ -247,8 +248,8 @@ class NetworkMapAngelService(NetworkMapService):
 
         while True:
             try:
-                self.logger.debug(f'[Running] (cd {self.dir} && java -jar {self.artifact_name}.jar --jar-name=networkmap.jar --zone-host=127.0.0.1 --zone-port=5061 --token={token} --service=NETWORK_MAP --polling-interval=10 --working-dir=./ --network-truststore=./certificates/network-root-truststore.jks --truststore-password=trustpass --root-alias=cordarootca --network-parameters-file=network-parameters.conf --tls=true --tls-keystore=./certificates/corda-ssl-network-map-keys.jks --tls-keystore-password=password --tls-truststore=./certificates/corda-ssl-trust-store.jks --tls-truststore-password=trustpass --verbose)')
-                exit_code = self.sysi.run_get_exit_code(f'(cd {self.dir} && java -jar {self.artifact_name}.jar --jar-name=networkmap.jar --zone-host=127.0.0.1 --zone-port=5061 --token={token} --service=NETWORK_MAP --polling-interval=10 --working-dir=./ --network-truststore=./certificates/network-root-truststore.jks --truststore-password=trustpass --root-alias=cordarootca --network-parameters-file=network-parameters.conf --tls=true --tls-keystore=./certificates/corda-ssl-network-map-keys.jks --tls-keystore-password=password --tls-truststore=./certificates/corda-ssl-trust-store.jks --tls-truststore-password=trustpass --verbose)')
+                self.logger.debug(f'[Running] (cd {self.dir} && {java_string(self.java_version)} && java -jar {self.artifact_name}.jar --jar-name=networkmap.jar --zone-host=127.0.0.1 --zone-port=5061 --token={token} --service=NETWORK_MAP --polling-interval=10 --working-dir=./ --network-truststore=./certificates/network-root-truststore.jks --truststore-password=trustpass --root-alias=cordarootca --network-parameters-file=network-parameters.conf --tls=true --tls-keystore=./certificates/corda-ssl-network-map-keys.jks --tls-keystore-password=password --tls-truststore=./certificates/corda-ssl-trust-store.jks --tls-truststore-password=trustpass --verbose)')
+                exit_code = self.sysi.run_get_exit_code(f'(cd {self.dir} && {java_string(self.java_version)} && java -jar {self.artifact_name}.jar --jar-name=networkmap.jar --zone-host=127.0.0.1 --zone-port=5061 --token={token} --service=NETWORK_MAP --polling-interval=10 --working-dir=./ --network-truststore=./certificates/network-root-truststore.jks --truststore-password=trustpass --root-alias=cordarootca --network-parameters-file=network-parameters.conf --tls=true --tls-keystore=./certificates/corda-ssl-network-map-keys.jks --tls-keystore-password=password --tls-truststore=./certificates/corda-ssl-trust-store.jks --tls-truststore-password=trustpass --verbose)')
                 if exit_code != 0:
                     raise RuntimeError(f'{self.artifact_name} service stopped')
             except:
@@ -378,8 +379,8 @@ class ZoneService(DeploymentService):
     def deploy(self):
         while True:
             try:
-                self.logger.debug(f'Running: (cd {self.dir} && java -jar {self.artifact_name}.jar --driver-class-name=org.h2.Driver --jdbc-driver= --user=zoneuser --password=password --url="jdbc:h2:file:./h2/zone-persistence;DB_CLOSE_ON_EXIT=FALSE;LOCK_TIMEOUT=10000;WRITE_DELAY=0;AUTO_SERVER_PORT=0" --run-migration=true --enm-listener-port=5061 --admin-listener-port=5063 --auth-host=127.0.0.1 --auth-port=8081 --auth-trust-store-location certificates/corda-ssl-trust-store.jks --auth-trust-store-password trustpass --auth-issuer "http://test" --auth-leeway 5 --tls=true --tls-keystore=certificates/corda-ssl-identity-manager-keys.jks --tls-keystore-password=password --tls-truststore=certificates/corda-ssl-trust-store.jks --tls-truststore-password=trustpass) to start zone service')
-                exit_code = self.sysi.run_get_exit_code(f'(cd {self.dir} && java -jar {self.artifact_name}.jar --driver-class-name=org.h2.Driver --jdbc-driver= --user=zoneuser --password=password --url="jdbc:h2:file:./h2/zone-persistence;DB_CLOSE_ON_EXIT=FALSE;LOCK_TIMEOUT=10000;WRITE_DELAY=0;AUTO_SERVER_PORT=0" --run-migration=true --enm-listener-port=5061 --admin-listener-port=5063 --auth-host=127.0.0.1 --auth-port=8081 --auth-trust-store-location certificates/corda-ssl-trust-store.jks --auth-trust-store-password trustpass --auth-issuer "http://test" --auth-leeway 5 --tls=true --tls-keystore=certificates/corda-ssl-identity-manager-keys.jks --tls-keystore-password=password --tls-truststore=certificates/corda-ssl-trust-store.jks --tls-truststore-password=trustpass)')
+                self.logger.debug(f'Running: (cd {self.dir} && {java_string(self.java_version)} && java -jar {self.artifact_name}.jar --driver-class-name=org.h2.Driver --jdbc-driver= --user=zoneuser --password=password --url="jdbc:h2:file:./h2/zone-persistence;DB_CLOSE_ON_EXIT=FALSE;LOCK_TIMEOUT=10000;WRITE_DELAY=0;AUTO_SERVER_PORT=0" --run-migration=true --enm-listener-port=5061 --admin-listener-port=5063 --auth-host=127.0.0.1 --auth-port=8081 --auth-trust-store-location certificates/corda-ssl-trust-store.jks --auth-trust-store-password trustpass --auth-issuer "http://test" --auth-leeway 5 --tls=true --tls-keystore=certificates/corda-ssl-identity-manager-keys.jks --tls-keystore-password=password --tls-truststore=certificates/corda-ssl-trust-store.jks --tls-truststore-password=trustpass) to start zone service')
+                exit_code = self.sysi.run_get_exit_code(f'(cd {self.dir} && {java_string(self.java_version)} && java -jar {self.artifact_name}.jar --driver-class-name=org.h2.Driver --jdbc-driver= --user=zoneuser --password=password --url="jdbc:h2:file:./h2/zone-persistence;DB_CLOSE_ON_EXIT=FALSE;LOCK_TIMEOUT=10000;WRITE_DELAY=0;AUTO_SERVER_PORT=0" --run-migration=true --enm-listener-port=5061 --admin-listener-port=5063 --auth-host=127.0.0.1 --auth-port=8081 --auth-trust-store-location certificates/corda-ssl-trust-store.jks --auth-trust-store-password trustpass --auth-issuer "http://test" --auth-leeway 5 --tls=true --tls-keystore=certificates/corda-ssl-identity-manager-keys.jks --tls-keystore-password=password --tls-truststore=certificates/corda-ssl-trust-store.jks --tls-truststore-password=trustpass)')
                 if exit_code != 0:
                     raise RuntimeError(f'{self.artifact_name} service stopped')
             except:
