@@ -441,17 +441,17 @@ class ServiceManager:
                 download_errors[service] = str(e)
         self.check_all()
 
-    def deploy_all(self, health_check_frequency: int):
+    def deploy_all(self, log_config: Dict[str, Any], health_check_frequency: int):
         self.check_all()
         self.config_manager.validate(self.get_deployment_services(deploy_without_angel=self.deploy_without_angel))
         self.PKI.validate_certificates(self.get_deployment_services(pure_cenm=True, deploy_without_angel=self.deploy_without_angel))
-        self.deployment_manager.deploy_services(health_check_frequency)
+        self.deployment_manager.deploy_services(log_config, health_check_frequency)
 
-    def deploy_nodes(self, health_check_frequency: int):
+    def deploy_nodes(self, log_config: Dict[str, Any], health_check_frequency: int):
         node_manager = self._get_node_manager()
         self.config_manager.validate(node_manager.new_nodes)
         self.PKI.validate_certificates(node_manager.new_nodes)
-        node_manager.deploy_nodes(health_check_frequency)
+        node_manager.deploy_nodes(log_config, health_check_frequency)
 
     def generate_certificates(self):
         self.check_all()

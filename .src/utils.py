@@ -1,11 +1,13 @@
 import logging
+import logging.handlers
 import os
 import re
 from enum import Enum
-from typing import List, Dict
+from typing import List, Dict, Any
 import warnings
 import functools
 import uuid
+import subprocess
 
 def deprecated(func):
     """This is a decorator which can be used to mark functions
@@ -96,6 +98,24 @@ def get_corda_java_version(version: str) -> int:
         return 8
     else:
         return 17
+
+def log_listener(log_config: Dict[str, Any], queue):
+    handler = logging.FileHandler(log_config['log_file'])
+    formatter = logging.Formatter(log_config['log_format'])
+    handler.setFormatter(formatter)
+
+    root = logging.getLogger()
+    root.addHandler(handler)
+    root.setLevel(log_config['log_level'])
+    while True:
+        try:
+            record = queue.get()
+            if record is None:
+                break
+            logger = logging.getLogger(record.name)
+            logger.handle(record)
+        except KeyboardInterrupt:
+            break
 
 # TODO: Printer can probably be absorbed into [ServiceManager]
 class Printer:

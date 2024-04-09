@@ -1,9 +1,9 @@
 import glob
 import logging
 import multiprocessing
-from typing import List, Dict
+from typing import List, Dict, Any
 from time import sleep
-from utils import SystemInteract, CenmTool
+from utils import SystemInteract, CenmTool, log_listener
 from services.base_services import DeploymentService
 
 class DeploymentManager:
@@ -36,7 +36,7 @@ class DeploymentManager:
     
     def _setup_auth(self):
         self.logger.info("Running initial setupAuth.sh")
-        self.sysi.run("(cd cenm-auth/setup-auth && bash setupAuth.sh)")
+        self.sysi.run("(cd cenm-auth/setup-auth && bash setupAuth.sh)", stdout_to_console=True)
 
         cenm_tool = CenmTool(self.versions['NMS_VISUAL_VERSION'])
 
@@ -49,7 +49,7 @@ class DeploymentManager:
             self.logger.info(f"Subzones: {zones}, will only set permissions for {zones[0]}")
             self.sysi.run(f'(cd cenm-auth/setup-auth/roles && for file in *.json; do perl -i -pe "s/<SUBZONE_ID>/{zones[0]}/g" $file; done)')
             self.logger.info("Running setupAuth.sh with updated zone permissions")
-            self.sysi.run("(cd cenm-auth/setup-auth && bash setupAuth.sh)")
+            self.sysi.run("(cd cenm-auth/setup-auth && bash setupAuth.sh)", stdout_to_console=True)
             self.logger.info("Setting subzone config")
             token = cenm_tool.cenm_set_subzone_config(zones[0])
             self.logger.info(f"Subzone network map token: {token}")
@@ -83,10 +83,14 @@ The script failed to terminate the network map process. Please terminate the pro
                 else:
                     self.logger.info('Network map terminated')
 
-    def deploy_services(self, health_check_frequency: int):
+    def deploy_services(self, log_config: Dict[str, Any], health_check_frequency: int):
         """Deploy services in a standard CENM deployment.
         
         """
+        queue = multiprocessing.Queue(-1)
+        log_listener_process = multiprocessing.Process(target=log_listener, args=(log_config, queue,))
+        self.logger.info("Starting process log listener")
+        log_listener_process.start()
         try:
             self.run_subzone_setup = self._run_subzone_setup()
             self.logger.info("Starting the cenm deployment")
@@ -95,7 +99,7 @@ The script failed to terminate the network map process. Please terminate the pro
             for service, function in self.functions.items():
                 service_object = self.deployment_services[service]
                 self.logger.info(f'attempting to deploy {service}')
-                process = multiprocessing.Process(target=function, name=service, daemon=True)
+                process = multiprocessing.Process(target=function, name=service, daemon=True, args=(queue, log_config,))
                 self.processes.append(process)
                 process.start()
                 self.logger.info(f'deployed {service} waiting {service_object.deployment_time} seconds until next service')
@@ -117,7 +121,7 @@ The script failed to terminate the network map process. Please terminate the pro
                         self.logger.error(f'{process} is unhealthy, restarting')
                         process.terminate()
                         self.processes.remove(process)
-                        new_process = multiprocessing.Process(target=self.functions[process.name], name=process.name, daemon=True)
+                        new_process = multiprocessing.Process(target=self.functions[process.name], name=process.name, daemon=True, args=(queue, log_config,))
                         new_process.start()
                         self.processes.append(new_process)
                 sleep(health_check_frequency)
@@ -129,7 +133,10 @@ The script failed to terminate the network map process. Please terminate the pro
                 process.terminate()
                 self.logger.info(f'Waiting for {process} to exit gracefully')
                 process.join()
-                
+
+            queue.put(None)
+            log_listener_process.join()
+
             self._wait_for_service_termination()
             self.sysi.remove(".tmp-*", silent=True)
             self.logger.info('All processes terminated, exiting')

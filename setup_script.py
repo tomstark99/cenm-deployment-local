@@ -3,15 +3,6 @@ import sys
 if f'{os.getcwd()}/.src' not in sys.path:
     sys.path.append(f'{os.getcwd()}/.src')
 import logging
-# Setup global logger
-formatter = logging.Formatter('[%(asctime)s, %(levelname)s] %(name)s %(message)s')
-log_directory = os.path.abspath('.logs')
-log_file = os.path.join(log_directory, f'cenm-deployment-{os.uname()[1]}.log')
-# logging handlers
-fileHandler = logging.FileHandler(log_file, mode='w')
-fileHandler.setFormatter(formatter)
-streamHandler = logging.StreamHandler()
-streamHandler.setFormatter(formatter)
 import argparse
 import warnings
 from datetime import datetime
@@ -100,8 +91,14 @@ parser.add_argument(
 parser.add_argument(
     '--logging-level', 
     type=str, 
-    default='INFO', 
+    default='DEBUG', 
     help='Set the logging level for the CENM deployment'
+)
+parser.add_argument(
+    '--log-to-console',
+    default=False,
+    action='store_true',
+    help='Log to console as well as file'
 )
 parser.add_argument(
     '--validate',
@@ -224,16 +221,31 @@ package which is required for this script to run. Please install it using:
 
 def main(args: argparse.Namespace):
 
-    logger = logging.getLogger()
-    logger.addHandler(fileHandler)
-    logger.addHandler(streamHandler)
+    log_config = {
+        'log_file': os.path.join(os.path.abspath('.logs'), f'cenm-deployment-{os.uname()[1]}.log'),
+        'log_level': LogLevel[args.logging_level].value,
+        'log_format': '[%(asctime)s, %(levelname)s] %(name)s %(message)s',
+        'log_to_console': args.log_to_console
+    }
 
+    formatter = logging.Formatter(log_config['log_format'])
+    # logging handlers
+    file_handler = logging.FileHandler(log_config['log_file'], mode='w')
+    file_handler.setFormatter(formatter)
+
+    logger = logging.getLogger()
     try:
-        logger.setLevel(LogLevel[args.logging_level].value)
+        logger.setLevel(log_config['log_level'])
     except:
         ValueError(f"Invalid logging level: {args.logging_level}")
+    logger.addHandler(file_handler)
 
-    logger.info(f"Logging to: {log_file}")
+    if args.log_to_console:
+        stream_handler = logging.StreamHandler()
+        stream_handler.setFormatter(formatter)
+        logger.addHandler(stream_handler)
+
+    logger.info(f"Logging to: {log_config['log_file']}")
     logger.info(f"Logging level: {args.logging_level}")
 
     validate_arguments(args)
@@ -285,11 +297,11 @@ def main(args: argparse.Namespace):
 
     if args.run_default_deployment:
         logger.info("Running default deployment")
-        service_manager.deploy_all(args.health_check_frequency)
+        service_manager.deploy_all(log_config, args.health_check_frequency)
 
     if args.run_node_deployment:
         logger.info(f"Running node deployment for {args.nodes} node(s)")
-        service_manager.deploy_nodes(args.health_check_frequency)
+        service_manager.deploy_nodes(log_config, args.health_check_frequency)
 
 if __name__ == '__main__':
     main(parser.parse_args())

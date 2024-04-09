@@ -1,9 +1,9 @@
 import glob
 import logging
 import multiprocessing
-from typing import List, Dict
+from typing import List, Dict, Any
 from time import sleep
-from utils import SystemInteract
+from utils import SystemInteract, log_listener
 from services.base_services import NodeDeploymentService
 
 class NodeCountMismatchException(Exception):
@@ -79,7 +79,7 @@ class NodeManager:
                 sleep(5)
                 java_processes = _get_processes()
 
-    def deploy_nodes(self, health_check_frequency: int):
+    def deploy_nodes(self, log_config: Dict[str, Any], health_check_frequency: int):
         """Deploy nodes in a standard CENM deployment.
         
         """
@@ -90,7 +90,7 @@ class NodeManager:
             for service, function in self.functions.items():
                 service_object = self.deployment_nodes[service]
                 self.logger.info(f'attempting to deploy {service}')
-                process = multiprocessing.Process(target=function, name=service, daemon=True)
+                process = multiprocessing.Process(target=function, name=service, daemon=True, args=(queue, log_config,))
                 self.processes.append(process)
                 process.start()
                 self.logger.info(f'deployed {service} waiting {service_object.deployment_time} seconds until next service')
@@ -106,7 +106,7 @@ class NodeManager:
                         self.logger.error(f'{process} is unhealthy, restarting')
                         process.terminate()
                         self.processes.remove(process)
-                        new_process = multiprocessing.Process(target=self.functions[process.name], name=process.name, daemon=True)
+                        new_process = multiprocessing.Process(target=self.functions[process.name], name=process.name, daemon=True, args=(queue, log_config,))
                         new_process.start()
                         self.processes.append(new_process)
                 sleep(health_check_frequency)
