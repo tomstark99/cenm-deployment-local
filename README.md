@@ -20,14 +20,20 @@ You need to do this for all versions of Java that are required to run the servic
 
 ### `JAVA_HOME`
 
-before deploying please make sure that your `JAVA_HOME` is being set correctly in your `.bashrc` (or equivalent). You can check if this is already being done by running:
+Before deploying please make sure that your `JAVA_HOME` is being set correctly in your `.bashrc` (or equivalent), the script will not run without it. You can check if this is already being done by running:
 
 ```bash
 echo $JAVA_HOME
 /Library/Java/JavaVirtualMachines/zulu-8.jdk/Contents/Home
 ```
 
-If this doesn't return anything then you need to add a line to your `.bashrc` corresponding to the java version you want to run by default in your terminal.
+If this doesn't return anything then you need to export `JAVA_HOME` as an environment variable.
+
+```bash
+export JAVA_HOME='/Library/Java/JavaVirtualMachines/<java-install-folder-name>/Contents/Home'
+```
+
+It is recommended that you then add this line to your `.bashrc` corresponding to the java version you want to run by default in your terminal so you do not have to set this every time.
 
 ```bash
 echo "export JAVA_HOME='/Library/Java/JavaVirtualMachines/<java-install-folder-name>/Contents/Home'" >> .bashrc
