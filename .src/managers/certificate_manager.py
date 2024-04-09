@@ -1,4 +1,5 @@
-from utils import SystemInteract, Logger
+import logging
+from utils import SystemInteract, java_string, get_cenm_java_version
 from typing import List
 from services.base_services import DeploymentService
 
@@ -14,9 +15,10 @@ class CertificateManager:
     """Manages the certificates for the CENM deployment.
 
     """
-    def __init__(self):
-        self.logger = Logger().get_logger(__name__)
+    def __init__(self, cenm_version: str):
+        self.logger = logging.getLogger(__name__)
         self.sysi = SystemInteract()
+        self.java_version = get_cenm_java_version(cenm_version)
 
     def _copy(self, source, destination):
         self.sysi.run(f'cp cenm-pki/{source} {destination}')
@@ -79,7 +81,7 @@ class CertificateManager:
         self._copy('key-stores/corda-ssl-identity-manager-keys.jks', 'cenm-zone/certificates')
 
     def _distribute_certs(self):
-        print('Distributing certificates')
+        self.logger.info('Distributing certificates')
         self._auth()
         self._gateway()
         self._idman()
@@ -94,19 +96,19 @@ class CertificateManager:
         exits = [0]
         for path in ['crl-files', 'key-stores', 'trust-stores']:
             if self.sysi.path_exists(f'cenm-pki/{path}'):
-                print(f'{path} already exists. Skipping generation.')
+                self.logger.warning(f'{path} already exists. Skipping generation.')
                 certs[path] = True
             else:
                 certs[path] = False
         if self.sysi.path_exists(f'cenm-auth/certificates/jwt-store.jks'):
-            print('Auth jwt-store already exists. Skipping generation.')
+            self.logger.warning('Auth jwt-store already exists. Skipping generation.')
         else:
-            print('Generating auth jwt-store')
+            self.logger.info('Generating auth jwt-store')
             exits.append(self.sysi.run_get_exit_code(f'(cd cenm-auth && keytool -genkeypair -alias oauth-test-jwt -keyalg RSA -keypass password -keystore certificates/jwt-store.jks -storepass password -dname "CN=abc1, OU=abc2, O=abc3, L=abc4, ST=abc5, C=abc6" > /dev/null 2>&1)'))
 
         if not all(certs.values()):
-            print('Generating certificates')
-            exits.append(self.sysi.run_get_exit_code(f'(cd cenm-pki && java -jar pkitool.jar -f pki.conf)'))
+            self.logger.info('Generating certificates')
+            exits.append(self.sysi.run_get_exit_code(f'(cd cenm-pki && {java_string(self.java_version)} && java -jar pkitool.jar -f pki.conf)'))
         self._distribute_certs()
         return max(exits)
 
@@ -122,5 +124,5 @@ class CertificateManager:
                 if message:
                     self.logger.error(f'{service} certificate validation failed')
                     exceptions.append(CertificateError(service, message))
-            print("There were certificate validation errors, check the logs")
+            self.logger.error("There were certificate validation errors, check the logs")
             raise ExceptionGroup("Combined certificate exceptions", exceptions)

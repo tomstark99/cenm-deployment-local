@@ -1,8 +1,9 @@
 import glob
+import logging
 import multiprocessing
 from typing import List, Dict
 from time import sleep
-from utils import Logger, SystemInteract, CenmTool
+from utils import SystemInteract, CenmTool
 from services.base_services import DeploymentService
 
 class DeploymentManager:
@@ -19,7 +20,7 @@ class DeploymentManager:
         self.functions = {f'{s.artifact_name}-{s.dir}': s.deploy for s in services}
         self.processes = []
         self.versions = self._get_version_dict()
-        self.logger = Logger().get_logger(__name__)
+        self.logger = logging.getLogger(__name__)
         self.sysi = SystemInteract()
     
     def _run_subzone_setup(self) -> bool:
@@ -58,12 +59,29 @@ class DeploymentManager:
                 return int(self.sysi.run_get_stdout(
                     'ps | grep -E ".*(cd cenm-[a-z]+ \&\& java -jar).+(\.jar).+(\.conf)*.*" | wc -l | sed -e "s/^ *//g"'
                 ))
-
+            def _is_network_map_running() -> bool:
+                return int(self.sysi.run_get_stdout(
+                    'ps | grep -E ".*(java -jar networkmap\.jar.*\.conf).*" | wc -l | sed -e "s/^ *//g"'
+                )) != 0
+            
             java_processes = _get_processes()
             while int(java_processes) > 0:
                 self.logger.info(f'Waiting for {java_processes} processes to terminate')
                 sleep(5)
                 java_processes = _get_processes()
+
+            if _is_network_map_running():
+                self.logger.info('Network map still running, terminating')
+                nm_pid = self.sysi.run_get_stdout('ps | grep -E ".*(java -jar networkmap\.jar.*\.conf).*" | cut -d " " -f 1 | sed -e "s/^ *//g"')
+                self.sysi.run(f'kill -9 {nm_pid}', silent=True)
+                sleep(10)
+                if _is_network_map_running():
+                    nm_pid = self.sysi.run_get_stdout('ps | grep -E ".*(java -jar networkmap\.jar.*\.conf).*" | cut -d " " -f 1 | sed -e "s/^ *//g"')
+                    print("""
+The script failed to terminate the network map process. Please terminate the process manually by running:
+    kill -9 {0}""".format(nm_pid))
+                else:
+                    self.logger.info('Network map terminated')
 
     def deploy_services(self, health_check_frequency: int):
         """Deploy services in a standard CENM deployment.
@@ -113,5 +131,6 @@ class DeploymentManager:
                 process.join()
                 
             self._wait_for_service_termination()
+            self.sysi.remove(".tmp-*", silent=True)
             self.logger.info('All processes terminated, exiting')
             exit(0)

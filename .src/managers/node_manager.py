@@ -1,8 +1,9 @@
 import glob
+import logging
 import multiprocessing
 from typing import List, Dict
 from time import sleep
-from utils import Logger, SystemInteract
+from utils import SystemInteract
 from services.base_services import NodeDeploymentService
 
 class NodeCountMismatchException(Exception):
@@ -27,7 +28,7 @@ class NodeManager:
         self.functions = {f'{s.artifact_name}{i}': s.deploy for i, s in enumerate(self.new_nodes, 1)}
         self.processes = []
         self.versions = self._get_version_dict()
-        self.logger = Logger().get_logger(__name__)
+        self.logger = logging.getLogger(__name__)
         self.sysi = SystemInteract()
 
     def _create_deployment_nodes(self) -> List[NodeDeploymentService]:

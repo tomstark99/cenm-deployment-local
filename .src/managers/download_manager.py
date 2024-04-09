@@ -1,4 +1,5 @@
 import os
+import logging
 from utils import deprecated, SystemInteract
 
 class DownloadManager:
@@ -20,6 +21,7 @@ class DownloadManager:
         self.password = password
         self.wget = False #self._is_wget_installed()
         self.sysi = SystemInteract()
+        self.logger = logging.getLogger(__name__)
 
     @deprecated
     def _is_wget_installed(self) -> bool:
@@ -47,7 +49,7 @@ class DownloadManager:
         
         """
         artifact = url.split("/")[-1]
-        print(f'Validating {artifact}')
+        self.logger.info(f'Validating {artifact}')
         return not self.check_md5sum(artifact, url)
 
     def check_md5sum(self, artifact_path: str, artifact_url: str) -> bool:
