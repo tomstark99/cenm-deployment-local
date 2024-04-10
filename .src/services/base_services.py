@@ -355,7 +355,7 @@ class NodeDeploymentService(DeploymentService):
         while int(self.sysi.run_get_stdout('ps | grep -E ".*(cd corda-bridge.+\&\& java -jar).+(\.jar).+(\.conf).*" | wc -l | sed -e "s/^ *//g"')) == 0:
             sleep(5)
             self.logger.info('Waiting for Corda Firewall (bridge) to start')
-        self.logger.info('Corda Firewall (bridge) started, starting Artemis')
+        self.logger.info('Corda Firewall (bridge) started, starting Node')
 
     def deploy(self):
         artifact_name = f'{self.artifact_name}-{self.version}'

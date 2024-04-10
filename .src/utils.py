@@ -316,19 +316,24 @@ class SystemInteract:
         else:
             return os.system(cmd)
 
-    def run_get_stdout(self, cmd: str) -> str:
+    def run_get_stdout(self, cmd: str, silent: bool = False) -> str:
         """Runs a system command and returns the stdout stream
 
         Args:
             cmd:
                 Command to run.
+            silent:
+                If true, will suppress stderr.
 
         Returns:
             The stdout stream as a string.
 
         """
         unique_file = f'.tmp-{uuid.uuid4().hex}'
-        os.system(f'{cmd} > {unique_file}')
+        if silent:
+            os.system(f'{cmd} > {unique_file} 2>/dev/null')
+        else:
+            os.system(f'{cmd} > {unique_file}')
         try:
             with open(unique_file, 'r') as f:
                 out = f.read()

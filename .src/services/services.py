@@ -350,7 +350,9 @@ class CordaBridgeService(CordaFirewallDeploymentService):
     pass
 
 class CordaFloatService(CordaFirewallDeploymentService):
-    pass
+
+    def _get_cert_count(self) -> int:
+        return int(self.sysi.run_get_stdout(f"ls {self.dir}/tunnel | xargs | wc -w | sed -e 's/^ *//g'"))
 
 class ArtemisService(DeploymentService):
 
@@ -404,8 +406,8 @@ class ArtemisService(DeploymentService):
         self._wait_for_float()
         while True:
             try:
-                self.logger.debug(f'[Running] (cd {self.dir} && ./artemis-master/bin/artemis run) to start {self.artifact_name} service')
-                exit_code = self.sysi.run_get_exit_code(f'(cd {self.dir} && ./artemis-master/bin/artemis run)')
+                self.logger.debug(f'[Running] (cd {self.dir} && {java_string(self.java_version)} && ./artemis-master/bin/artemis run) to start {self.artifact_name} service')
+                exit_code = self.sysi.run_get_exit_code(f'(cd {self.dir} && {java_string(self.java_version)} && ./artemis-master/bin/artemis run)')
                 if exit_code != 0:
                     raise RuntimeError(f'{self.artifact_name} service stopped')
             except:
