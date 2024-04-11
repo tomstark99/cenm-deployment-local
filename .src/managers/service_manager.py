@@ -263,7 +263,7 @@ class ServiceManager:
             config_file=    None,
             deployment_time=None,
             java_version=   self.corda_java_version)
-        self.CORDA_BRIDGE = CordaFirewallDeploymentService(
+        self.CORDA_BRIDGE = CordaBridgeService(
             abb=            'bridge',
             dir=            'corda-bridge',
             artifact_name=  'corda-firewall',
@@ -276,7 +276,7 @@ class ServiceManager:
             deployment_time=self.deploy_time.FIREWALL_DEPLOY_TIME.value,
             certificates=   4,
             java_version=   self.corda_java_version)
-        self.CORDA_FLOAT = CordaFirewallDeploymentService(
+        self.CORDA_FLOAT = CordaFloatService(
             abb=            'float',
             dir=            'corda-float',
             artifact_name=  'corda-firewall',
