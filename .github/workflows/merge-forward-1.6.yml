@@ -25,9 +25,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
-          git checkout -b merge-forward-postgres origin/release/1.6
-          git push origin merge-forward-postgres
-          hub pull-request -b release/postgres -h merge-forward-postgres -m "Merge forward updates release/1.6 -> release/postgres" || true
+          git checkout -b merge-forward-postgres/1.6 origin/release/1.6
+          git push origin merge-forward-postgres/1.6
+          hub pull-request -b release/postgres/1.6 -h merge-forward-postgres/1.6 -m "Merge forward updates release/1.6 -> release/postgres/1.6" || true
 
   create_pull_request_firewall:
     runs-on: ubuntu-latest
@@ -48,9 +48,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
-          git checkout -b merge-forward-firewall origin/release/1.6
-          git push origin merge-forward-firewall
-          hub pull-request -b release/firewall -h merge-forward-firewall -m "Merge forward updates release/1.6 -> release/firewall" || true
+          git checkout -b merge-forward-firewall/1.6 origin/release/1.6
+          git push origin merge-forward-firewall/1.6
+          hub pull-request -b release/firewall/1.6 -h merge-forward-firewall/1.6 -m "Merge forward updates release/1.6 -> release/firewall/1.6" || true
 
   create_pull_request_release_1_7:
     runs-on: ubuntu-latest
