@@ -102,6 +102,9 @@ parser.add_argument(
 if not os.path.exists(".env"):
     raise FileNotFoundError("No .env file found. Please create one and try again.")
 
+if not os.environ.get('JAVA_HOME'):
+    raise OSError("JAVA_HOME is not set. Please set it and try again.")
+
 with open(".env", 'r') as f:
     # dictionary comprehension to read the build.args file, split each value on '=' and create a map of key:value
     args = {key:value for (key,value) in [x.strip().split("=") for x in f.readlines()]}

@@ -2,9 +2,10 @@ import os
 from abc import ABC
 from pyhocon import ConfigFactory
 from managers.download_manager import DownloadManager
-from utils import SystemInteract, Logger, Constants
+from utils import SystemInteract, Logger, Constants, java_string
 import glob
 import uuid
+import re
 
 class BaseService(ABC):
     """Base service for all services to inherit.
@@ -143,6 +144,10 @@ class DeploymentService(BaseService):
             The time taken for the service to deploy (average)
             this gives an indication how long the deployment manager
             should sleep before starting the next service
+        certificates:
+            The number of certificates required for the service
+        java_version:
+            The version of java to use for the service
 
     """
     def __init__(self,
@@ -156,7 +161,8 @@ class DeploymentService(BaseService):
         password: str,
         config_file: str,
         deployment_time: int,
-        certificates: int = None
+        certificates: int = None,
+        java_version: int = 8
     ):
         super().__init__(
             abb, 
@@ -174,6 +180,7 @@ class DeploymentService(BaseService):
         self.config_file = config_file
         self.deployment_time = deployment_time
         self.certificates = certificates
+        self.java_version = java_version
 
     def __str__(self) -> str:
         return f"DeploymentService[{self.abb}, {self.dir}, {self.artifact_name}, {self.ext}, {self.version}]"
@@ -189,8 +196,8 @@ class DeploymentService(BaseService):
         self.logger.info(f'Thread started to deploy {self.artifact_name}')
         while True:
             try:
-                self.logger.debug(f'[Running] (cd {self.dir} && java -jar {self.artifact_name}.jar -f {self.config_file}) to start {self.artifact_name} service')
-                exit_code = self.sysi.run_get_exit_code(f'(cd {self.dir} && java -jar {self.artifact_name}.jar -f {self.config_file})')
+                self.logger.debug(f'[Running] (cd {self.dir} && {java_string(self.java_version)} && java -jar {self.artifact_name}.jar -f {self.config_file}) to start {self.artifact_name} service')
+                exit_code = self.sysi.run_get_exit_code(f'(cd {self.dir} && {java_string(self.java_version)} && java -jar {self.artifact_name}.jar -f {self.config_file})')
                 if exit_code != 0:
                     raise RuntimeError(f'{self.artifact_name} service stopped')
             except:
@@ -278,7 +285,8 @@ class NodeDeploymentService(DeploymentService):
             password=self.dlm.password,
             config_file=self.config_file,
             deployment_time=self.deployment_time,
-            certificates=self.certificates
+            certificates=self.certificates,
+            java_version=self.java_version
         )
         if not self.sysi.path_exists(f'cenm-{new_dir}'):
             self._construct_new_node_dir(new_dir)
@@ -293,8 +301,8 @@ class NodeDeploymentService(DeploymentService):
         self.sysi.wait_for_host_on_port(10000)
         exit_code = -1
         while exit_code != 0:
-            self.logger.debug(f'[Running] (cd {self.dir} && java -jar {artifact_name}.jar initial-registration --network-root-truststore ./certificates/network-root-truststore.jks --network-root-truststore-password trustpass -f {self.config_file}) to start {self.artifact_name} service')
-            exit_code = self.sysi.run_get_exit_code(f'(cd {self.dir} && java -jar {artifact_name}.jar initial-registration --network-root-truststore ./certificates/network-root-truststore.jks --network-root-truststore-password trustpass -f {self.config_file})')
+            self.logger.debug(f'[Running] (cd {self.dir} && {java_string(self.java_version)} && java -jar {artifact_name}.jar initial-registration --network-root-truststore ./certificates/network-root-truststore.jks --network-root-truststore-password trustpass -f {self.config_file}) to start {self.artifact_name} service')
+            exit_code = self.sysi.run_get_exit_code(f'(cd {self.dir} && {java_string(self.java_version)} && java -jar {artifact_name}.jar initial-registration --network-root-truststore ./certificates/network-root-truststore.jks --network-root-truststore-password trustpass -f {self.config_file})')
 
     def deploy(self):
         artifact_name = f'{self.artifact_name}-{self.version}'
@@ -308,8 +316,8 @@ class NodeDeploymentService(DeploymentService):
 
         while True:
             try:
-                self.logger.debug(f'[Running] (cd {self.dir} && java -jar {artifact_name}.jar -f {self.config_file}) to start {self.artifact_name} service')
-                exit_code = self.sysi.run_get_exit_code(f'(cd {self.dir} && java -jar {artifact_name}.jar -f {self.config_file})')
+                self.logger.debug(f'[Running] (cd {self.dir} && {java_string(self.java_version)} && java -jar {artifact_name}.jar -f {self.config_file}) to start {self.artifact_name} service')
+                exit_code = self.sysi.run_get_exit_code(f'(cd {self.dir} && {java_string(self.java_version)} && java -jar {artifact_name}.jar -f {self.config_file})')
                 if exit_code != 0:
                     raise RuntimeError(f'{self.artifact_name} service stopped')
             except:
