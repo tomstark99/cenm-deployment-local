@@ -69,7 +69,7 @@ class NodeManager:
     def _wait_for_service_termination(self):
             def _get_processes() -> int:
                 return int(self.sysi.run_get_stdout(
-                    'ps | grep -E ".*(cd cenm-node-[0-9]+ \&\& java -jar).+(\.jar).+(\.conf).*" | wc -l | sed -e "s/^ *//g"'
+                    'ps | grep -E ".*(cd cenm-node-[0-9]+ \&\&.*\&\& java -jar).+(\.jar).+(\.conf).*" | wc -l | sed -e "s/^ *//g"'
                 ))
 
             java_processes = _get_processes()
@@ -119,5 +119,6 @@ class NodeManager:
                 process.join()
                 
             self._wait_for_service_termination()
+            self.sysi.remove(".tmp-*", silent=True)
             self.logger.info('All processes terminated, exiting')
             exit(1)
