@@ -61,8 +61,8 @@ class BaseService(ABC):
     def __build_url(self, url: str):
         return f'{url}/{self.artifact_name}/{self.version}/{self.artifact_name}-{self.version}.{self.ext}'
 
-    def _zip_name(self):
-        return f'{self.artifact_name}-{self.version}.{self.ext}'
+    def _zip_name(self, no_version: bool = False):
+        return f'{self.artifact_name}.{self.ext}' if no_version else f'{self.artifact_name}-{self.version}.{self.ext}'
     
     def _clone_repo(self):
         if not self.sysi.path_exists(self.dir):
