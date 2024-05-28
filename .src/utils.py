@@ -7,6 +7,8 @@ from sys import platform
 import warnings
 import functools
 import uuid
+from time import sleep
+import glob
 
 def deprecated(func):
     """This is a decorator which can be used to mark functions
@@ -27,6 +29,7 @@ def deprecated(func):
 class Constants(Enum):
     BASE_URL = 'https://software.r3.com/artifactory'
     GITHUB_URL = 'https://github.com/tomstark99'
+    ARTEMIS_URL = 'https://archive.apache.org/dist/activemq/activemq-artemis'
     EXT_PACKAGE = 'extensions-lib-release-local/com/r3/appeng'
     ENM_PACKAGE = 'r3-enterprise-network-manager/com/r3/enm'
     CORDA_PACKAGE = 'r3-corda-releases/com/r3/corda'
@@ -40,9 +43,13 @@ class Constants(Enum):
     DB_SERVICES = ['auth', 'idman', 'nmap', 'notary', 'node', 'zone']
 
     RUNTIME_FILES = {
-        'dirs': ["logs", "h2", "ssh", "shell-commands", "djvm", "artemis", "brokers", "additional-node-infos"],
+        'dirs': ["logs", "h2", "ssh", "shell-commands", "djvm", "brokers", "additional-node-infos"],
         'notary_files': ["process-id", "network-parameters", "nodekeystore.jks", "truststore.jks", "sslkeystore.jks", "certificate-request-id.txt"],
-        'angel_files': ["network-parameters.conf", "network-parameters.conf_bak", "networkmap.conf", "networkmap.conf_bak", "identitymanager.conf", "identitymanager.conf_bak", "token"]
+        'angel_files': ["network-parameters.conf", "network-parameters.conf_bak", "networkmap.conf", "networkmap.conf_bak", "identitymanager.conf", "identitymanager.conf_bak", "token"],
+        'firewall_files': ['network-parameters', 'nodesUnitedSslKeystore.jks', 'firewall-process-id'],
+        'firewall_dirs': ['logs'],
+        'artemis': ['artemis-master'],
+        'ha-tools': ['nodesUnitedSslKeystore.jks', 'ha-utilities.log']
     }
 
 class Platform(Enum):
@@ -61,6 +68,8 @@ class DeployTimeConstants(Enum):
 
     NOTARY_DEPLOY_TIME = 60
     NODE_DEPLOY_TIME = 70
+    FIREWALL_DEPLOY_TIME = 20
+    ARTEMIS_DEPLOY_TIME = 10
 
 class DeployTimeAngelConstants(Enum):
     ANGEL_DEPLOY_TIME = 5
@@ -73,6 +82,8 @@ class DeployTimeAngelConstants(Enum):
 
     NOTARY_DEPLOY_TIME = 5
     NODE_DEPLOY_TIME = 30
+    FIREWALL_DEPLOY_TIME = 20
+    ARTEMIS_DEPLOY_TIME = 10
 
 def java_string(java_version: int) -> str:
     java_home = re.sub(r"\d+", str(java_version), SystemInteract().run_get_stdout('echo $JAVA_HOME').strip())
@@ -96,6 +107,15 @@ def get_corda_java_version(version: str) -> int:
     else:
         return 17
 
+def get_artemis_version(version: str) -> str:
+    corda_sub_version = re.findall(r'\.(\d+).?', version)[0]
+    if not corda_sub_version:
+        return 8
+    elif int(corda_sub_version) < 12:
+        return "2.6.3"
+    else:
+        return "2.29.0"
+    
 # TODO: Logger needs an overhaul
 class Logger:
     """Logger management
@@ -227,6 +247,21 @@ class SystemInteract:
         else:
             os.system(f'perl -i -pe "s/{predicate}/{replace}/" {file}')
 
+    def copy(self, source: str, destination: str, silent: bool = False):
+        """Copies a file
+        
+        Args:
+            source:
+                what to copy
+            destination:
+                where to copy to
+        
+        """
+        if silent:
+            os.system(f'cp {source} {destination} > /dev/null 2>&1')
+        else:
+            os.system(f'cp {source} {destination}')
+
     def remove(self, path: str, silent: bool = False):
         """Removes a system path
 
@@ -300,19 +335,24 @@ class SystemInteract:
         else:
             return os.system(cmd)
 
-    def run_get_stdout(self, cmd: str) -> str:
+    def run_get_stdout(self, cmd: str, silent: bool = False) -> str:
         """Runs a system command and returns the stdout stream
 
         Args:
             cmd:
                 Command to run.
+            silent:
+                If true, will suppress stderr.
 
         Returns:
             The stdout stream as a string.
 
         """
         unique_file = f'.tmp-{uuid.uuid4().hex}'
-        os.system(f'{cmd} > {unique_file}')
+        if silent:
+            os.system(f'{cmd} > {unique_file} 2>/dev/null')
+        else:
+            os.system(f'{cmd} > {unique_file}')
         try:
             with open(unique_file, 'r') as f:
                 out = f.read()
@@ -337,6 +377,56 @@ class SystemInteract:
             self.sleep(5)
         # Safety sleep to allow service on [port] to fully start
         self.sleep(10)
+
+class FirewallTool:
+
+    def __init__(self, artifact_name: str, artifact_version: str): 
+        self.sysi = SystemInteract()
+        self.logger = Logger().get_logger(__name__)
+        self.artifact_name = f'{artifact_name}-{artifact_version}'
+        self.java_version = get_corda_java_version(artifact_version)
+        self.nodes = glob.glob('cenm-node-*')
+
+    def _get_node_networkparameters(self):
+        self.logger.info('Getting network parameters')
+        node_dir = self.nodes[0]
+        self.logger.debug(f'[Running] timeout 30 bash -c "cd {node_dir} && {java_string(self.java_version)} && java -jar {self.artifact_name}.jar -f node.conf" to get network parameters')
+        self.sysi.run(f'timeout 30 bash -c "cd {node_dir} && {java_string(self.java_version)} && java -jar {self.artifact_name}.jar -f node.conf"')
+        self.logger.info('Terminated corda process that was started to get network parameters')
+    
+    def _wait_for_ssl_keys(self):
+        present = False
+        while not present:
+            print('Waiting for ssl keys to be generated')
+            self.logger.info('Waiting for ssl keys to be generated')
+            exists = [self.sysi.path_exists(f'{node_dir}/certificates/sslkeystore.jks') for node_dir in self.nodes]
+            present = all(exists)
+            self.sysi.sleep(5)
+        # Safety sleep to allow nodes to run database migration scripts
+        self.sysi.sleep(10)
+        
+
+    def _import_ssl_key(self):
+        self.logger.info('Importing ssl key')
+        cmd = f'java -jar corda-tools-ha-utilities.jar import-ssl-key --bridge-keystore-password=bridgeKeyStorePassword --bridge-keystore=./nodesCertificates/nodesUnitedSslKeystore.jks ' + ''.join([f'--node-keystores=../{node_dir}/certificates/sslkeystore.jks --node-keystore-passwords=cordacadevpass ' for node_dir in self.nodes])
+        self.logger.info(f'[Running] {cmd}')
+        self.sysi.run(f'cd corda-tools && {java_string(self.java_version)} && {cmd}')
+    
+    def _copy_firewall_files(self):
+        node_dir = self.nodes[0]
+        self.logger.info(f"Copying firewall files for {node_dir}")
+        self.sysi.run(f'cp {node_dir}/network-parameters corda-bridge')
+        self.sysi.run(f'cp {node_dir}/network-parameters corda-float')
+        self.sysi.run(f'cp {node_dir}/certificates/network-root-truststore.jks corda-bridge/nodesCertificates')
+        self.sysi.run('cp corda-tools/nodesCertificates/nodesUnitedSslKeystore.jks corda-bridge/nodesCertificates')
+
+    def setup_firewall(self):
+        self.logger.info('Setting up firewall')
+        if not glob.glob('corda-float/network-parameters') and not glob.glob('corda-bridge/network-parameters'):
+            self._wait_for_ssl_keys()
+            self._import_ssl_key()
+            self._get_node_networkparameters()
+            self._copy_firewall_files()
 
 class CenmTool:
     """Class for using cenm cli tool
