@@ -11,6 +11,9 @@ corda-*/
 # logs
 .logs/*
 
+# runtime
+.tmp-*
+
 # misc artifacts
 *.jar
 *.zip

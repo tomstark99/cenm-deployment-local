@@ -1,4 +1,4 @@
-from utils import SystemInteract, Logger
+from utils import SystemInteract, Logger, java_string, get_cenm_java_version
 from typing import List
 from services.base_services import DeploymentService
 
@@ -14,9 +14,10 @@ class CertificateManager:
     """Manages the certificates for the CENM deployment.
 
     """
-    def __init__(self):
+    def __init__(self, pki_version: str):
         self.logger = Logger().get_logger(__name__)
         self.sysi = SystemInteract()
+        self.java_version = get_cenm_java_version(pki_version)
 
     def _copy(self, source, destination):
         self.sysi.run(f'cp cenm-pki/{source} {destination}')
@@ -106,7 +107,7 @@ class CertificateManager:
 
         if not all(certs.values()):
             print('Generating certificates')
-            exits.append(self.sysi.run_get_exit_code(f'(cd cenm-pki && java -jar pkitool.jar -f pki.conf)'))
+            exits.append(self.sysi.run_get_exit_code(f'(cd cenm-pki && {java_string(self.java_version)} && java -jar pkitool.jar -f pki.conf)'))
         self._distribute_certs()
         return max(exits)
 

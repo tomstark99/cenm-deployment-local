@@ -1,11 +1,12 @@
 import os
-import glob
-import uuid
 import multiprocessing
 from abc import ABC
 from pyhocon import ConfigFactory
 from managers.download_manager import DownloadManager
 from utils import SystemInteract, Logger, Constants, java_string
+import glob
+import uuid
+import re
 from time import sleep
 
 class BaseService(ABC):

@@ -1,13 +1,14 @@
+import logging
 import os
 import re
-import glob
-import uuid
-import logging
+from enum import Enum
+from typing import List, Dict, Optional
+from sys import platform
 import warnings
 import functools
-from enum import Enum
-from typing import List, Dict
+import uuid
 from time import sleep
+import glob
 
 def deprecated(func):
     """This is a decorator which can be used to mark functions
@@ -51,6 +52,11 @@ class Constants(Enum):
         'ha-tools': ['nodesUnitedSslKeystore.jks', 'ha-utilities.log']
     }
 
+class Platform(Enum):
+    LINUX = 'linux'
+    OSX = 'osx'
+    WINDOWS = 'windows'
+
 class DeployTimeConstants(Enum):
     ANGEL_DEPLOY_TIME = 5
     IDMAN_DEPLOY_TIME = 10
@@ -79,6 +85,10 @@ class DeployTimeAngelConstants(Enum):
     FIREWALL_DEPLOY_TIME = 20
     ARTEMIS_DEPLOY_TIME = 10
 
+def java_string(java_version: int) -> str:
+    java_home = re.sub(r"\d+", str(java_version), SystemInteract().run_get_stdout('echo $JAVA_HOME').strip())
+    return f'unset JAVA_HOME; export JAVA_HOME={java_home}'
+
 def get_cenm_java_version(version: str) -> int:
     cenm_sub_version = re.findall(r'\.(\d+).?', version)[0]
     if not cenm_sub_version:
@@ -105,10 +115,6 @@ def get_artemis_version(version: str) -> str:
         return "2.6.3"
     else:
         return "2.29.0"
-
-def java_string(java_version: int) -> str:
-    java_home = re.sub(r"\d+", str(java_version), SystemInteract().run_get_stdout('echo $JAVA_HOME').strip())
-    return f'unset JAVA_HOME; export JAVA_HOME={java_home}'
     
 # TODO: Logger needs an overhaul
 class Logger:
@@ -121,7 +127,7 @@ class Logger:
     def _set_logging_config(self, logger_name: str, log_file: str, level=logging.DEBUG):
         logger = logging.getLogger(logger_name)
 
-        fileHandler = logging.FileHandler(log_file, mode='w')
+        fileHandler = logging.FileHandler(log_file, mode='a')
         fileHandler.setFormatter(self.formatter)
 
         streamHandler = logging.StreamHandler()
@@ -186,6 +192,19 @@ class SystemInteract:
     """Class for using system commands
 
     """
+    def __init__(self):
+        self.platform = self._platform()
+
+    def _platform(self) -> Optional[str]:
+        if platform == "linux" or platform == "linux2":
+            return Platform.LINUX
+        elif platform == "darwin":
+            return Platform.OSX
+        elif platform == "win32":
+            return Platform.WINDOWS
+        else:
+            return None
+
     def path_exists(self, path: str) -> bool:
         """Checks a path exists
 
@@ -353,7 +372,8 @@ class SystemInteract:
                 The host to wait on, default is localhost.
 
         """
-        while self.run_get_exit_code(f'nc -z -G 3 {host} {port} > /dev/null 2>&1') != 0:
+        wait_code = "G" if self.platform == Platform.OSX else "w"
+        while self.run_get_exit_code(f'nc -z -{wait_code} 3 {host} {port} > /dev/null 2>&1') != 0:
             self.sleep(5)
         # Safety sleep to allow service on [port] to fully start
         self.sleep(10)
@@ -420,11 +440,12 @@ class CenmTool:
         self.host = 'http://127.0.0.1:8089'
         self.path = 'cenm-gateway/cenm-tool'
         self.jar = f'cenm-tool-{nms_visual_version}.jar'
+        self.java_version = get_cenm_java_version(nms_visual_version)
         self.sysi = SystemInteract()
 
     def _run(self, cmd: str):
         print(f'Running: {cmd}')
-        return self.sysi.run_get_stdout(f'(cd {self.path} && java -jar {self.jar} {cmd})')
+        return self.sysi.run_get_stdout(f'(cd {self.path} && {java_string(self.java_version)} && java -jar {self.jar} {cmd})')
 
     def _login(self, username: str, password: str):
         self._run(f'context login -s {self.host} -u {username} -p {password}')
