@@ -572,7 +572,9 @@ class ServiceManager:
                     service.clean_certificates()
                 if clean_runtime:
                     service.clean_runtime()
-            self.sysi.remove(".logs/*", silent=True)
+            if any([clean_deep, clean_artifacts, clean_certs, clean_runtime]):
+                self.sysi.remove(".logs/*", silent=True)
+                self.sysi.remove(".tmp-*", silent=True)
 
     def clean_specific_artifacts(self, services: List[str]):
         print("Cleaning individual artifacts does not work with any other arguments, script will exit after downloading.")
