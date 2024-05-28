@@ -220,7 +220,8 @@ class ServiceManager:
             password=       password,
             config_file=    'node.conf',
             deployment_time=self.deploy_time.NODE_DEPLOY_TIME.value,
-            certificates=   1)
+            certificates=   1,
+            java_version=   self.corda_java_version)
         self.NODE_HA_TOOLS = CordaToolsHaUtilitiesService(
             abb=            'ha-utuilities',
             dir=            'cenm-node',
@@ -232,7 +233,6 @@ class ServiceManager:
             password=       password,
             config_file=    None,
             deployment_time=None,
-            certificates=   1,
             java_version=   self.corda_java_version)
         self.FINANCE_CONTRACTS_CORDAPP = FinanceContractsCordapp(
             abb=            'finance-contracts',
