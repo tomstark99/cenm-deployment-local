@@ -291,6 +291,26 @@ class CordaShellService(BaseService):
         self.error = self.dlm.download(self.url)
         self._handle_corda_shell()
         return self.error
+
+class CordaToolsHaUtilitiesService(DeploymentService):
+
+    def _create_dir(self):
+        if not self.sysi.path_exists(self.dir):
+            print(f'Creating {self.dir}')
+            self.sysi.run(f'mkdir {self.dir}')
+
+    def _move(self):
+        self.sysi.run(f'mv {self._zip_name()} {self.dir}/{self._zip_name(no_version=True)}')
+
+    def download(self) -> bool:
+        self._create_dir()
+        if self._check_presence():
+            return
+        # If artifact not present then download it
+        print(f'Downloading {self._zip_name()}')
+        self.error = self.dlm.download(self.url)
+        self._move()
+        return self.error
     
 class FinanceContractsCordapp(CordappService):
     pass
