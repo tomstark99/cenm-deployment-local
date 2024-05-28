@@ -212,6 +212,17 @@ class ServiceManager:
             config_file=    'node.conf',
             deployment_time=self.deploy_time.NODE_DEPLOY_TIME.value,
             certificates=   1)
+        self.NODE_HA_TOOLS = CordaToolsHaUtilitiesService(
+            abb=            'ha-utuilities',
+            dir=            'cenm-node',
+            artifact_name=  'corda-tools-ha-utilities',
+            version=        corda_version,
+            ext=            'jar',
+            url=            f'{self.base_url}/{self.corda_package}',
+            username=       username,
+            password=       password,
+            config_file=    None,
+            deployment_time=None)
         self.FINANCE_CONTRACTS_CORDAPP = FinanceContractsCordapp(
             abb=            'finance-contracts',
             dir=            'cenm-node',
@@ -364,6 +375,7 @@ class ServiceManager:
             self.NMAP_ANGEL,
             self.NOTARY,
             self.NODE,
+            self.NODE_HA_TOOLS,
             self.FINANCE_CONTRACTS_CORDAPP,
             self.FINANCE_WORKFLOWS_CORDAPP,
             self.CORDA_SHELL,
