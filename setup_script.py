@@ -2,11 +2,14 @@ import os
 import sys
 if f'{os.getcwd()}/.src' not in sys.path:
     sys.path.append(f'{os.getcwd()}/.src')
+import logging
 import argparse
 import warnings
+from datetime import datetime
 from typing import Dict
+from enum import Enum
 from managers.service_manager import ServiceManager
-from utils import SystemInteract
+from utils import SystemInteract, LogLevel
 
 parser = argparse.ArgumentParser(description='A modular framework for local CENM deployments and testing.')
 parser.add_argument(
@@ -84,6 +87,18 @@ parser.add_argument(
     type=int,
     default=30,
     help='Time to wait between each health check, default is 30 seconds'
+)
+parser.add_argument(
+    '--logging-level', 
+    type=str, 
+    default='DEBUG', 
+    help='Set the logging level for the CENM deployment'
+)
+parser.add_argument(
+    '--log-to-console',
+    default=False,
+    action='store_true',
+    help='Log to console as well as file'
 )
 parser.add_argument(
     '--validate',
@@ -181,15 +196,26 @@ def validate_arguments(args: argparse.Namespace):
         raise ValueError("Please only run one deployment at a time")
     if args.deploy_without_angel and not args.run_default_deployment:
         raise ValueError("Cannot use --deploy-without-angel without --run-default-deployment")
+    if SystemInteract().run_get_exit_code("unzip --help", silent=True) != 0:
+        raise RuntimeError("""
+The following package is not installed in your shell:
+    unzip
+    
+this is required for the script to run correctly. Please install it using:
+    sudo apt-get install unzip""")
     if args.run_default_deployment:
         if SystemInteract().run_get_exit_code("jq --help", silent=True) != 0:
-            raise RuntimeError("jq is not installed in your shell, please install it and try again")
+            raise RuntimeError("""
+The following package is not installed in your shell:
+    jq
+    
+this is required for the deployment to run correctly. Please install it using:
+    sudo apt-get install jq""")
     if args.run_default_deployment:
         try:
             from pyhocon import ConfigFactory
         except ImportError:
             raise ImportError("""
-
 Your python installation is missing the:
     pyhocon
 
@@ -197,6 +223,33 @@ package which is required for this script to run. Please install it using:
     python -m pip install pyhocon""")
 
 def main(args: argparse.Namespace):
+
+    log_config = {
+        'log_file': os.path.join(os.path.abspath('.logs'), f'cenm-deployment-{os.uname()[1]}.log'),
+        'log_level': LogLevel[args.logging_level].value,
+        'log_format': '[%(asctime)s, %(levelname)s] %(name)s %(message)s',
+        'log_to_console': args.log_to_console
+    }
+
+    formatter = logging.Formatter(log_config['log_format'])
+    # logging handlers
+    file_handler = logging.FileHandler(log_config['log_file'], mode='w')
+    file_handler.setFormatter(formatter)
+
+    logger = logging.getLogger()
+    try:
+        logger.setLevel(log_config['log_level'])
+    except:
+        ValueError(f"Invalid logging level: {args.logging_level}")
+    logger.addHandler(file_handler)
+
+    if args.log_to_console:
+        stream_handler = logging.StreamHandler()
+        stream_handler.setFormatter(formatter)
+        logger.addHandler(stream_handler)
+
+    logger.info(f"Logging to: {log_config['log_file']}")
+    logger.info(f"Logging level: {args.logging_level}")
 
     validate_arguments(args)
 
@@ -214,10 +267,12 @@ def main(args: argparse.Namespace):
 
     if args.download_individual:
         services = [arg.strip() for arg in args.download_individual.split(',')]
+        logger.info(f"Downloading individual artifacts: {services}")
         service_manager.download_specific(services)
 
     if args.clean_individual_artifacts:
         services = [arg.strip() for arg in args.clean_individual_artifacts.split(',')]
+        logger.info(f"Cleaning individual artifacts: {services}")
         service_manager.clean_specific_artifacts(services)
 
     service_manager.clean_all(
@@ -232,19 +287,24 @@ def main(args: argparse.Namespace):
         service_manager.versions()
 
     if args.validate:
+        logger.info("Starting validation of services")
         service_manager.check_all()
 
     if args.setup_dir_structure:
+        logger.info("Setting up directory structure and downloading all artifacts")
         service_manager.download_all()
 
     if args.generate_certs:
+        logger.info("Generating certificates and distributing them to services")
         service_manager.generate_certificates()
 
     if args.run_default_deployment:
-        service_manager.deploy_all(args.health_check_frequency)
+        logger.info("Running default deployment")
+        service_manager.deploy_all(log_config, args.health_check_frequency)
 
     if args.run_node_deployment:
-        service_manager.deploy_nodes(args.health_check_frequency)
+        logger.info(f"Running node deployment for {args.nodes} node(s)")
+        service_manager.deploy_nodes(log_config, args.health_check_frequency)
 
 if __name__ == '__main__':
     main(parser.parse_args())

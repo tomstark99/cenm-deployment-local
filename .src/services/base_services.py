@@ -1,8 +1,11 @@
 import os
 from abc import ABC
+from typing import Dict, Any
 from pyhocon import ConfigFactory
 from managers.download_manager import DownloadManager
-from utils import SystemInteract, Logger, Constants, java_string
+from utils import SystemInteract, Constants, java_string
+import logging
+import logging.handlers
 import glob
 import uuid
 import re
@@ -174,8 +177,7 @@ class DeploymentService(BaseService):
             username,
             password
         )
-        logging_manager = Logger()
-        self.logger = logging_manager.get_logger(dir)
+        self.logger = None
         self.runtime_files = Constants.RUNTIME_FILES.value
         self.config_file = config_file
         self.deployment_time = deployment_time
@@ -191,8 +193,21 @@ class DeploymentService(BaseService):
     def _get_cert_count(self) -> bool:
         cert_count = self.sysi.run_get_stdout(f"ls {self.dir}/certificates | xargs | wc -w | sed -e 's/^ *//g'")
         return int(cert_count)
+      
+    def _setup_process_logger(self, queue, log_config):
+        handler = logging.handlers.QueueHandler(queue)
+        root = logging.getLogger()
+        root.setLevel(log_config['log_level'])
+        root.addHandler(handler)
+        if log_config['log_to_console']:
+            stream_handler = logging.StreamHandler()
+            formatter = logging.Formatter(log_config['log_format'])
+            stream_handler.setFormatter(formatter)
+            root.addHandler(stream_handler)
+        self.logger = logging.getLogger(f'{__name__}.{self.artifact_name}.{self.dir}')
         
-    def deploy(self):
+    def deploy(self, queue, log_config):
+        self._setup_process_logger(queue, log_config)
         self.logger.info(f'Thread started to deploy {self.artifact_name}')
         while True:
             try:
@@ -200,8 +215,11 @@ class DeploymentService(BaseService):
                 exit_code = self.sysi.run_get_exit_code(f'(cd {self.dir} && {java_string(self.java_version)} && java -jar {self.artifact_name}.jar -f {self.config_file})')
                 if exit_code != 0:
                     raise RuntimeError(f'{self.artifact_name} service stopped')
-            except:
-                self.logger.warning(f'{self.artifact_name} service stopped. Restarting...')
+            except Exception as e:
+                if type(e) == KeyboardInterrupt:
+                    break
+                else:
+                    self.logger.warning(f'{self.artifact_name} service stopped. Restarting...')
 
     def validate_config(self) -> str:
         try:
@@ -304,7 +322,8 @@ class NodeDeploymentService(DeploymentService):
             self.logger.debug(f'[Running] (cd {self.dir} && {java_string(self.java_version)} && java -jar {artifact_name}.jar initial-registration --network-root-truststore ./certificates/network-root-truststore.jks --network-root-truststore-password trustpass -f {self.config_file}) to start {self.artifact_name} service')
             exit_code = self.sysi.run_get_exit_code(f'(cd {self.dir} && {java_string(self.java_version)} && java -jar {artifact_name}.jar initial-registration --network-root-truststore ./certificates/network-root-truststore.jks --network-root-truststore-password trustpass -f {self.config_file})')
 
-    def deploy(self):
+    def deploy(self, queue, log_config):
+        self._setup_process_logger(queue, log_config)
         artifact_name = f'{self.artifact_name}-{self.version}'
 
         if not self._is_registered():
@@ -320,8 +339,11 @@ class NodeDeploymentService(DeploymentService):
                 exit_code = self.sysi.run_get_exit_code(f'(cd {self.dir} && {java_string(self.java_version)} && java -jar {artifact_name}.jar -f {self.config_file})')
                 if exit_code != 0:
                     raise RuntimeError(f'{self.artifact_name} service stopped')
-            except:
-                self.logger.warning(f'{self.artifact_name} service stopped. Restarting...')
+            except Exception as e:
+                if type(e) == KeyboardInterrupt:
+                    break
+                else:
+                    self.logger.warning(f'{self.artifact_name} service stopped. Restarting...')
 
     def clean_runtime(self):
         for root, dirs, files in os.walk(self.dir):

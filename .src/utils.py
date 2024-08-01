@@ -1,12 +1,14 @@
 import logging
+import logging.handlers
 import os
 import re
 from enum import Enum
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 from sys import platform
 import warnings
 import functools
 import uuid
+import subprocess
 
 def deprecated(func):
     """This is a decorator which can be used to mark functions
@@ -96,40 +98,52 @@ def get_corda_java_version(version: str) -> int:
     else:
         return 17
 
-# TODO: Logger needs an overhaul
-class Logger:
-    """Logger management
+class LogLevel(Enum):
+    INFO = logging.INFO
+    DEBUG = logging.DEBUG
+    WARNING = logging.WARNING
+    ERROR = logging.ERROR
+    CRITICAL = logging.CRITICAL
 
-    """
-    def __init__(self):
-        self.formatter = logging.Formatter('[%(asctime)s, %(levelname)s] %(name)s %(message)s')
+def java_string(java_version: int) -> str:
+    java_home = re.sub(r"\d+", str(java_version), SystemInteract().run_get_stdout('echo $JAVA_HOME').strip())
+    return f'unset JAVA_HOME; export JAVA_HOME={java_home}'
 
-    def _set_logging_config(self, logger_name: str, log_file: str, level=logging.DEBUG):
-        logger = logging.getLogger(logger_name)
+def get_cenm_java_version(version: str) -> int:
+    cenm_sub_version = re.findall(r'\.(\d+).?', version)[0]
+    if not cenm_sub_version:
+        return 8
+    elif int(cenm_sub_version) < 7:
+        return 8
+    else:
+        return 17
 
-        fileHandler = logging.FileHandler(log_file, mode='a')
-        fileHandler.setFormatter(self.formatter)
+def get_corda_java_version(version: str) -> int:
+    corda_sub_version = re.findall(r'\.(\d+).?', version)[0]
+    if not corda_sub_version:
+        return 8
+    elif int(corda_sub_version) < 12:
+        return 8
+    else:
+        return 17
 
-        streamHandler = logging.StreamHandler()
-        streamHandler.setFormatter(self.formatter)
+def log_listener(log_config: Dict[str, Any], queue):
+    handler = logging.FileHandler(log_config['log_file'])
+    formatter = logging.Formatter(log_config['log_format'])
+    handler.setFormatter(formatter)
 
-        logger.setLevel(level)
-        logger.addHandler(fileHandler)
-        logger.addHandler(streamHandler)
-
-    def get_logger(self, name: str):
-        """Create a logger
-
-        Args:
-            name:
-                The name of the class that called the logger.
-
-        Returns:
-            A logger object with the name of the class that called it.
-
-        """
-        self._set_logging_config(name, f".logs/default-deployment-{name}.log")
-        return logging.getLogger(name)
+    root = logging.getLogger()
+    root.addHandler(handler)
+    root.setLevel(log_config['log_level'])
+    while True:
+        try:
+            record = queue.get()
+            if record is None:
+                break
+            logger = logging.getLogger(record.name)
+            logger.handle(record)
+        except KeyboardInterrupt:
+            break
 
 # TODO: Printer can probably be absorbed into [ServiceManager]
 class Printer:
@@ -227,7 +241,7 @@ class SystemInteract:
         else:
             os.system(f'perl -i -pe "s/{predicate}/{replace}/" {file}')
 
-    def remove(self, path: str, silent: bool = False):
+    def remove(self, path: str, silent: bool = False, stdout_to_console: bool = False):
         """Removes a system path
 
         Args:
@@ -240,7 +254,10 @@ class SystemInteract:
         if silent:
             os.system(f'rm -rf {path} > /dev/null 2>&1')
         else:
-            os.system(f'rm -rf {path}')
+            if stdout_to_console:
+                os.system(f'rm -rf {path}')
+            else:
+                os.system(f'rm -rf {path} >> .logs/cenm-deployment-stdout.log')
 
     def create_file_with(self, path: str, content: str):
         """Creates a file with content
@@ -269,7 +286,7 @@ class SystemInteract:
         """
         return os.system(f'grep -q "{content}" {path}') == 0
 
-    def run(self, cmd: str, silent: bool = False):
+    def run(self, cmd: str, silent: bool = False, stdout_to_console: bool = False):
         """Runs a system command
 
         Args:
@@ -280,9 +297,12 @@ class SystemInteract:
         if silent:
             os.system(f'{cmd} > /dev/null 2>&1')
         else:
-            os.system(cmd)
+            if stdout_to_console:
+                os.system(cmd)
+            else:
+                os.system(f'{cmd} >> .logs/cenm-deployment-stdout.log')
 
-    def run_get_exit_code(self, cmd: str, silent: bool = False) -> int:
+    def run_get_exit_code(self, cmd: str, silent: bool = False, stdout_to_console: bool = False) -> int:
         """Runs a system command and returns the exit code
 
         Args:
@@ -298,7 +318,10 @@ class SystemInteract:
         if silent:
             return os.system(f'{cmd} > /dev/null 2>&1')
         else:
-            return os.system(cmd)
+            if stdout_to_console:
+                return os.system(cmd)
+            else:
+                return os.system(f'{cmd} >> .logs/cenm-deployment-stdout.log')
 
     def run_get_stdout(self, cmd: str) -> str:
         """Runs a system command and returns the stdout stream
@@ -352,9 +375,11 @@ class CenmTool:
         self.jar = f'cenm-tool-{nms_visual_version}.jar'
         self.java_version = get_cenm_java_version(nms_visual_version)
         self.sysi = SystemInteract()
+        self.java_version = get_cenm_java_version(nms_visual_version)
+        self.logger = logging.getLogger(f'{__name__}.cenm_tool')
 
     def _run(self, cmd: str):
-        print(f'Running: {cmd}')
+        self.logger.info(f'Running: {cmd}')
         return self.sysi.run_get_stdout(f'(cd {self.path} && {java_string(self.java_version)} && java -jar {self.jar} {cmd})')
 
     def _login(self, username: str, password: str):

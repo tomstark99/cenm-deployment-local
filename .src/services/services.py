@@ -16,7 +16,8 @@ class AuthService(DeploymentService):
             + '.*objectName\\": \\"\K.*(?=\\")/<SUBZONE_ID>/g" $file; done)')
         super().clean_runtime()
 
-    def deploy(self):
+    def deploy(self, queue, log_config):
+        self._setup_process_logger(queue, log_config)
         self.logger.info(f'Thread started to deploy {self.artifact_name}')
         artifact_name = f'{self.artifact_name}-{self.version}'
         while True:
@@ -25,8 +26,11 @@ class AuthService(DeploymentService):
                 exit_code = self.sysi.run_get_exit_code(f'(cd {self.dir} && {java_string(self.java_version)} && java -jar {artifact_name}.jar -f {self.config_file} --initial-user-name admin --initial-user-password p4ssWord --keep-running --verbose)')
                 if exit_code != 0:
                     raise RuntimeError(f'{self.artifact_name} service stopped')
-            except:
-                self.logger.warning(f'{self.artifact_name} service stopped. Restarting...')
+            except Exception as e:
+                if type(e) == KeyboardInterrupt:
+                    break
+                else:
+                    self.logger.warning(f'{self.artifact_name} service stopped. Restarting...')
 
 class AuthClientService(BaseService):
     pass
@@ -68,7 +72,8 @@ class GatewayService(DeploymentService):
         cert_count_2 = self.sysi.run_get_stdout(f"ls {self.dir}/public/certificates | xargs | wc -w | sed -e 's/^ *//g'")
         return int(cert_count_1) + int(cert_count_2)
 
-    def deploy(self):
+    def deploy(self, queue, log_config):
+        self._setup_process_logger(queue, log_config)
         self.logger.info(f'Thread started to deploy {self.artifact_name}')
         artifact_name = f'{self.artifact_name}-{self.version}'
         while True:
@@ -77,8 +82,11 @@ class GatewayService(DeploymentService):
                 exit_code = self.sysi.run_get_exit_code(f'(cd {self.dir}/private && {java_string(self.java_version)} && java -jar {artifact_name}.jar -f {self.config_file})')
                 if exit_code != 0:
                     raise RuntimeError(f'{self.artifact_name} service stopped')
-            except:
-                self.logger.warning(f'{self.artifact_name} service stopped. Restarting...')
+            except Exception as e:
+                if type(e) == KeyboardInterrupt:
+                    break
+                else:
+                    self.logger.warning(f'{self.artifact_name} service stopped. Restarting...')
 
     def validate_config(self) -> str:
         try:
@@ -143,7 +151,8 @@ class IdentityManagerService(DeploymentService):
 
 class IdentityManagerAngelService(IdentityManagerService):
 
-    def deploy(self):
+    def deploy(self, queue, log_config):
+        self._setup_process_logger(queue, log_config)
         self.logger.info(f'Thread started to deploy {self.artifact_name}')
 
         while not glob.glob(f'{self.dir}/token'):
@@ -151,9 +160,6 @@ class IdentityManagerAngelService(IdentityManagerService):
             sleep(5)
 
         token = self.sysi.run_get_stdout(f'(cd {self.dir} && head -1 token)').strip()
-        # TODO: duplicated, remove before commit
-        print(f'Identity Manager token: {token}')
-        print(f'[Running] (cd {self.dir} && {java_string(self.java_version)} && java -jar {self.artifact_name}.jar --jar-name=identitymanager.jar --zone-host=127.0.0.1 --zone-port=5061 --token={token} --service=IDENTITY_MANAGER --polling-interval=10 --working-dir=./ --tls=true --tls-keystore=./certificates/corda-ssl-identity-manager-keys.jks --tls-keystore-password=password --tls-truststore=./certificates/corda-ssl-trust-store.jks --tls-truststore-password=trustpass --verbose)')
 
         while True:
             try:
@@ -161,8 +167,11 @@ class IdentityManagerAngelService(IdentityManagerService):
                 exit_code = self.sysi.run_get_exit_code(f'(cd {self.dir} && {java_string(self.java_version)} && java -jar {self.artifact_name}.jar --jar-name=identitymanager.jar --zone-host=127.0.0.1 --zone-port=5061 --token={token} --service=IDENTITY_MANAGER --polling-interval=10 --working-dir=./ --tls=true --tls-keystore=./certificates/corda-ssl-identity-manager-keys.jks --tls-keystore-password=password --tls-truststore=./certificates/corda-ssl-trust-store.jks --tls-truststore-password=trustpass --verbose)')
                 if exit_code != 0:
                     raise RuntimeError(f'{self.artifact_name} service stopped')
-            except:
-                self.logger.warning(f'{self.artifact_name} service stopped. Restarting...')
+            except Exception as e:
+                if type(e) == KeyboardInterrupt:
+                    break
+                else:
+                    self.logger.warning(f'{self.artifact_name} service stopped. Restarting...')
 
     def clean_runtime(self):
         for root, dirs, files in os.walk(self.dir):
@@ -225,7 +234,8 @@ class NetworkMapService(DeploymentService):
                     self.sysi.run(f'perl -i -pe "s/^.*notaryNodeInfoFile: \\"\K.*(?=\\")/INSERT_NODE_INFO_FILE_NAME_HERE/" {os.path.join(root, file)}')
         super().clean_runtime()
 
-    def deploy(self):
+    def deploy(self, queue, log_config):
+        self._setup_process_logger(queue, log_config)
         if not self._node_info():
             self._copy_notary_node_info()
             self._set_network_params()
@@ -233,7 +243,8 @@ class NetworkMapService(DeploymentService):
 
 class NetworkMapAngelService(NetworkMapService):
 
-    def deploy(self):
+    def deploy(self, queue, log_config):
+        self._setup_process_logger(queue, log_config)
         self.logger.info(f'Thread started to deploy {self.artifact_name}')
 
         if not self._node_info():
@@ -252,8 +263,11 @@ class NetworkMapAngelService(NetworkMapService):
                 exit_code = self.sysi.run_get_exit_code(f'(cd {self.dir} && {java_string(self.java_version)} && java -jar {self.artifact_name}.jar --jar-name=networkmap.jar --zone-host=127.0.0.1 --zone-port=5061 --token={token} --service=NETWORK_MAP --polling-interval=10 --working-dir=./ --network-truststore=./certificates/network-root-truststore.jks --truststore-password=trustpass --root-alias=cordarootca --network-parameters-file=network-parameters.conf --tls=true --tls-keystore=./certificates/corda-ssl-network-map-keys.jks --tls-keystore-password=password --tls-truststore=./certificates/corda-ssl-trust-store.jks --tls-truststore-password=trustpass --verbose)')
                 if exit_code != 0:
                     raise RuntimeError(f'{self.artifact_name} service stopped')
-            except:
-                self.logger.warning(f'{self.artifact_name} service stopped. Restarting...')
+            except Exception as e:
+                if type(e) == KeyboardInterrupt:
+                    break
+                else:
+                    self.logger.warning(f'{self.artifact_name} service stopped. Restarting...')
 
     def clean_runtime(self):
         for root, dirs, files in os.walk(self.dir):
@@ -339,7 +353,8 @@ class PkiToolService(DeploymentService):
         self._move()
         return self.error
 
-    def deploy(self):
+    def deploy(self, queue, log_config):
+        self._setup_process_logger(queue, log_config)
         cert_manager = CertificateManager(self.version)
         exit_code = -1
         try:
@@ -396,15 +411,19 @@ class SignerPluginCAService(SignerPluginService):
 
 class ZoneService(DeploymentService):
 
-    def deploy(self):
+    def deploy(self, queue, log_config):
+        self._setup_process_logger(queue, log_config)
         while True:
             try:
                 self.logger.debug(f'Running: (cd {self.dir} && {java_string(self.java_version)} && java -jar {self.artifact_name}.jar --driver-class-name=org.h2.Driver --jdbc-driver= --user=zoneuser --password=password --url="jdbc:h2:file:./h2/zone-persistence;DB_CLOSE_ON_EXIT=FALSE;LOCK_TIMEOUT=10000;WRITE_DELAY=0;AUTO_SERVER_PORT=0" --run-migration=true --enm-listener-port=5061 --admin-listener-port=5063 --auth-host=127.0.0.1 --auth-port=8081 --auth-trust-store-location certificates/corda-ssl-trust-store.jks --auth-trust-store-password trustpass --auth-issuer "http://test" --auth-leeway 5 --tls=true --tls-keystore=certificates/corda-ssl-identity-manager-keys.jks --tls-keystore-password=password --tls-truststore=certificates/corda-ssl-trust-store.jks --tls-truststore-password=trustpass) to start zone service')
                 exit_code = self.sysi.run_get_exit_code(f'(cd {self.dir} && {java_string(self.java_version)} && java -jar {self.artifact_name}.jar --driver-class-name=org.h2.Driver --jdbc-driver= --user=zoneuser --password=password --url="jdbc:h2:file:./h2/zone-persistence;DB_CLOSE_ON_EXIT=FALSE;LOCK_TIMEOUT=10000;WRITE_DELAY=0;AUTO_SERVER_PORT=0" --run-migration=true --enm-listener-port=5061 --admin-listener-port=5063 --auth-host=127.0.0.1 --auth-port=8081 --auth-trust-store-location certificates/corda-ssl-trust-store.jks --auth-trust-store-password trustpass --auth-issuer "http://test" --auth-leeway 5 --tls=true --tls-keystore=certificates/corda-ssl-identity-manager-keys.jks --tls-keystore-password=password --tls-truststore=certificates/corda-ssl-trust-store.jks --tls-truststore-password=trustpass)')
                 if exit_code != 0:
                     raise RuntimeError(f'{self.artifact_name} service stopped')
-            except:
-                self.logger.warning(f'{self.artifact_name} service stopped. Restarting...')
+            except Exception as e:
+                if type(e) == KeyboardInterrupt:
+                    break
+                else:
+                    self.logger.warning(f'{self.artifact_name} service stopped. Restarting...')
     
     def validate_config(self) -> str:
         return ""

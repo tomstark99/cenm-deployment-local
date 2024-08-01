@@ -1,6 +1,7 @@
+import logging
 from typing import List
 from services.base_services import DeploymentService
-from utils import Logger, SystemInteract
+from utils import SystemInteract
 
 class ConfigError(Exception):
     def __init__(self, service, message):
@@ -13,7 +14,7 @@ Config exception for service: {}
 class ConfigManager:
 
     def __init__(self):
-        self.logger = Logger().get_logger(__name__)
+        self.logger = logging.getLogger(__name__)
         self.sysi = SystemInteract()
 
     def validate(self, services: List[DeploymentService]):
@@ -28,5 +29,5 @@ class ConfigManager:
                 if message:
                     self.logger.error(f'{service} config validation failed')
                     exceptions.append(ConfigError(service, message))
-            print("There were config validation errors, check the logs")
+            self.logger.error("There were config validation errors, check the logs")
             raise ExceptionGroup("Combined config exceptions", exceptions)
