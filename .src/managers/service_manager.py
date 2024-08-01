@@ -225,7 +225,7 @@ class ServiceManager:
             java_version=   self.corda_java_version)
         self.NODE_HA_TOOLS = CordaToolsHaUtilitiesService(
             abb=            'ha-utuilities',
-            dir=            'cenm-node',
+            dir=            'node',
             artifact_name=  'corda-tools-ha-utilities',
             version=        corda_version,
             ext=            'jar',
