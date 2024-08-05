@@ -151,9 +151,6 @@ class IdentityManagerAngelService(IdentityManagerService):
             sleep(5)
 
         token = self.sysi.run_get_stdout(f'(cd {self.dir} && head -1 token)').strip()
-        # TODO: duplicated, remove before commit
-        print(f'Identity Manager token: {token}')
-        print(f'[Running] (cd {self.dir} && {java_string(self.java_version)} && java -jar {self.artifact_name}.jar --jar-name=identitymanager.jar --zone-host=127.0.0.1 --zone-port=5061 --token={token} --service=IDENTITY_MANAGER --polling-interval=10 --working-dir=./ --tls=true --tls-keystore=./certificates/corda-ssl-identity-manager-keys.jks --tls-keystore-password=password --tls-truststore=./certificates/corda-ssl-trust-store.jks --tls-truststore-password=trustpass --verbose)')
 
         while True:
             try:
@@ -380,6 +377,27 @@ class PkiToolService(DeploymentService):
                     self.sysi.remove(os.path.join(root, dir))
 
 class SignerService(DeploymentService):
+    pass
+
+class SignerAngelService(SignerService):
+
+    def deploy(self):
+        self.logger.info(f'Thread started to deploy {self.artifact_name}')
+
+        while not glob.glob(f'{self.dir}/token'):
+            self.logger.info(f'Waiting for token file to be created')
+            sleep(5)
+
+        token = self.sysi.run_get_stdout(f'(cd {self.dir} && head -1 token)').strip()
+
+        while True:
+            try:
+                self.logger.debug(f'[Running] (cd {self.dir} && {java_string(self.java_version)} && java -jar {self.artifact_name}.jar --jar-name=signer.jar --zone-host=127.0.0.1 --zone-port=5061 --token={token} --service=SIGNER --polling-interval=10 --working-dir=./ --tls=true --tls-keystore=./certificates/corda-ssl-signer-keys.jks --tls-keystore-password=password --tls-truststore=./certificates/corda-ssl-trust-store.jks --tls-truststore-password=trustpass --verbose)')
+                exit_code = self.sysi.run_get_exit_code(f'(cd {self.dir} && {java_string(self.java_version)} && java -jar {self.artifact_name}.jar --jar-name=signer.jar --zone-host=127.0.0.1 --zone-port=5061 --token={token} --service=SIGNER --polling-interval=10 --working-dir=./ --tls=true --tls-keystore=./certificates/corda-ssl-signer-keys.jks --tls-keystore-password=password --tls-truststore=./certificates/corda-ssl-trust-store.jks --tls-truststore-password=trustpass --verbose)')
+                if exit_code != 0:
+                    raise RuntimeError(f'{self.artifact_name} service stopped')
+            except:
+                self.logger.warning(f'{self.artifact_name} service stopped. Restarting...')
     
     def clean_runtime(self):
         for root, dirs, files in os.walk(self.dir):

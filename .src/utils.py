@@ -407,7 +407,12 @@ class CenmTool:
         # print(self.sysi.run_get_stdout(f'(cd {self.path} && cat ../../cenm-idman/identitymanager-init.conf)'))
         tokens['idman'] = self.set_config('identity-manager', '../../cenm-idman/identitymanager-init.conf')
 
+        self.set_admin_address('signer', 'localhost:5054')
+        # print(self.sysi.run_get_stdout(f'(cd {self.path} && cat ../../cenm-signer/signer-init.conf)'))
+        tokens['signer'] = self.set_config('signer', '../../cenm-signer/signer-init.conf')
+
         self.sysi.create_file_with(f'cenm-idman/token', tokens['idman'])
+        self.sysi.create_file_with(f'cenm-signer/token', tokens['signer'])
 
         while not self.sysi.file_contains("cenm-nmap/network-parameters-init.conf", "notaryNodeInfoFile.*nodeInfo"):
             self.sysi.sleep(5)
@@ -420,13 +425,7 @@ class CenmTool:
             label='Main',
             label_color='#941213'
         )
-        self.set_admin_address('signer', 'localhost:5054')
-        # print(self.sysi.run_get_stdout(f'(cd {self.path} && cat ../../cenm-signer/signer.conf)'))
-        tokens['signer'] = self.set_config('signer', '../../cenm-signer/signer.conf')
-
-        for token_dir, token in tokens.items():
-            if not self.sysi.path_exists(f'cenm-{token_dir}/token'):
-                self.sysi.create_file_with(f'cenm-{token_dir}/token', token)
+        self.sysi.create_file_with(f'cenm-nmap/token', tokens['nmap'])
 
         return tokens
 

@@ -282,8 +282,21 @@ class ServiceManager:
             url=            f'{self.base_url}/{self.enm_package}/services',
             username=       username,
             password=       password,
-            config_file=    'signer.conf',
+            config_file=    'signer-init.conf',
             deployment_time=self.deploy_time.SIGNER_DEPLOY_TIME.value,
+            certificates=   6,
+            java_version=   self.cenm_java_version)
+        self.SIGNER_ANGEL = SignerAngelService(
+            abb=            'signer-angel',
+            dir=            'signer',
+            artifact_name=  'angel',
+            version=        cenm_version,
+            ext=            'zip',
+            url=            f'{self.base_url}/{self.enm_package}/services',
+            username=       username,
+            password=       password,
+            config_file=    'signer-init.conf',
+            deployment_time=self.deploy_time.ANGEL_DEPLOY_TIME.value,
             certificates=   6,
             java_version=   self.cenm_java_version)
         self.SIGNER_CA_PLUGIN = SignerPluginCAService(
@@ -343,6 +356,7 @@ class ServiceManager:
             self.CORDA_SHELL,
             self.PKI,
             self.SIGNER,
+            self.SIGNER_ANGEL,
             self.SIGNER_CA_PLUGIN,
             self.SIGNER_NONCA_PLUGIN,
             self.ZONE
@@ -379,7 +393,7 @@ class ServiceManager:
                     self.GATEWAY,
                     self.ZONE,
                     self.IDMAN_ANGEL,
-                    self.SIGNER,
+                    self.SIGNER_ANGEL,
                     self.NMAP_ANGEL
                 ]
         else:
@@ -400,7 +414,7 @@ class ServiceManager:
                     self.GATEWAY,
                     self.ZONE,
                     self.IDMAN_ANGEL,
-                    self.SIGNER,
+                    self.SIGNER_ANGEL,
                     self.NOTARY, # Notary is not part of pure_cenm
                     self.NMAP_ANGEL
                 ]
