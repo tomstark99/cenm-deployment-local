@@ -3,7 +3,8 @@ import logging.handlers
 import os
 import re
 from enum import Enum
-from typing import List, Dict, Any
+from typing import List, Dict, Optional, Any
+from sys import platform
 import warnings
 import functools
 import uuid
@@ -46,6 +47,11 @@ class Constants(Enum):
         'angel_files': ["network-parameters.conf", "network-parameters.conf_bak", "networkmap.conf", "networkmap.conf_bak", "identitymanager.conf", "identitymanager.conf_bak", "token"]
     }
 
+class Platform(Enum):
+    LINUX = 'linux'
+    OSX = 'osx'
+    WINDOWS = 'windows'
+
 class DeployTimeConstants(Enum):
     ANGEL_DEPLOY_TIME = 5
     IDMAN_DEPLOY_TIME = 10
@@ -69,6 +75,28 @@ class DeployTimeAngelConstants(Enum):
 
     NOTARY_DEPLOY_TIME = 5
     NODE_DEPLOY_TIME = 30
+
+def java_string(java_version: int) -> str:
+    java_home = re.sub(r"\d+", str(java_version), SystemInteract().run_get_stdout('echo $JAVA_HOME').strip())
+    return f'unset JAVA_HOME; export JAVA_HOME={java_home}'
+
+def get_cenm_java_version(version: str) -> int:
+    cenm_sub_version = re.findall(r'\.(\d+).?', version)[0]
+    if not cenm_sub_version:
+        return 8
+    elif int(cenm_sub_version) < 7:
+        return 8
+    else:
+        return 17
+
+def get_corda_java_version(version: str) -> int:
+    corda_sub_version = re.findall(r'\.(\d+).?', version)[0]
+    if not corda_sub_version:
+        return 8
+    elif int(corda_sub_version) < 12:
+        return 8
+    else:
+        return 17
 
 class LogLevel(Enum):
     INFO = logging.INFO
@@ -158,6 +186,19 @@ class SystemInteract:
     """Class for using system commands
 
     """
+    def __init__(self):
+        self.platform = self._platform()
+
+    def _platform(self) -> Optional[str]:
+        if platform == "linux" or platform == "linux2":
+            return Platform.LINUX
+        elif platform == "darwin":
+            return Platform.OSX
+        elif platform == "win32":
+            return Platform.WINDOWS
+        else:
+            return None
+
     def path_exists(self, path: str) -> bool:
         """Checks a path exists
 
@@ -314,7 +355,8 @@ class SystemInteract:
                 The host to wait on, default is localhost.
 
         """
-        while self.run_get_exit_code(f'nc -z -G 3 {host} {port} > /dev/null 2>&1') != 0:
+        wait_code = "G" if self.platform == Platform.OSX else "w"
+        while self.run_get_exit_code(f'nc -z -{wait_code} 3 {host} {port} > /dev/null 2>&1') != 0:
             self.sleep(5)
         # Safety sleep to allow service on [port] to fully start
         self.sleep(10)
@@ -331,6 +373,7 @@ class CenmTool:
         self.host = 'http://127.0.0.1:8089'
         self.path = 'cenm-gateway/cenm-tool'
         self.jar = f'cenm-tool-{nms_visual_version}.jar'
+        self.java_version = get_cenm_java_version(nms_visual_version)
         self.sysi = SystemInteract()
         self.java_version = get_cenm_java_version(nms_visual_version)
         self.logger = logging.getLogger(f'{__name__}.cenm_tool')

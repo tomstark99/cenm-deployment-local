@@ -57,13 +57,13 @@ class DeploymentManager:
     def _wait_for_service_termination(self):
             def _get_processes() -> int:
                 return int(self.sysi.run_get_stdout(
-                    'ps | grep -E ".*(cd cenm-[a-z]+ \&\& java -jar).+(\.jar).+(\.conf)*.*" | wc -l | sed -e "s/^ *//g"'
+                    'ps | grep -E ".*(cd cenm-[a-z]+ \&\&.*\&\& java -jar).+(\.jar).+(\.conf)*.*" | wc -l | sed -e "s/^ *//g"'
                 ))
             def _is_network_map_running() -> bool:
                 return int(self.sysi.run_get_stdout(
                     'ps | grep -E ".*(java -jar networkmap\.jar.*\.conf).*" | wc -l | sed -e "s/^ *//g"'
                 )) != 0
-            
+
             java_processes = _get_processes()
             while int(java_processes) > 0:
                 self.logger.info(f'Waiting for {java_processes} processes to terminate')

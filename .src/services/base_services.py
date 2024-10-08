@@ -64,8 +64,8 @@ class BaseService(ABC):
     def __build_url(self, url: str):
         return f'{url}/{self.artifact_name}/{self.version}/{self.artifact_name}-{self.version}.{self.ext}'
 
-    def _zip_name(self):
-        return f'{self.artifact_name}-{self.version}.{self.ext}'
+    def _zip_name(self, no_version: bool = False):
+        return f'{self.artifact_name}.{self.ext}' if no_version else f'{self.artifact_name}-{self.version}.{self.ext}'
     
     def _clone_repo(self):
         if not self.sysi.path_exists(self.dir):
@@ -193,7 +193,7 @@ class DeploymentService(BaseService):
     def _get_cert_count(self) -> bool:
         cert_count = self.sysi.run_get_stdout(f"ls {self.dir}/certificates | xargs | wc -w | sed -e 's/^ *//g'")
         return int(cert_count)
-
+      
     def _setup_process_logger(self, queue, log_config):
         handler = logging.handlers.QueueHandler(queue)
         root = logging.getLogger()
