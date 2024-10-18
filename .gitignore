@@ -14,6 +14,7 @@ cenm-*/
 !cenm-pki/
 !cenm-signer/
 !cenm-zone/
+corda-*/
 
 # args
 .env
