@@ -157,7 +157,7 @@ class PostgresManager:
             raise RuntimeError("Minikube cluster could not be started")
 
     def deploy_postgres(self, health_check_frequency: int):
-        self._set_node_branch()
+        # self._set_node_branch()
         self._validate_node_config()
         self.start_minikube_cluster()
         if not self._is_running():
