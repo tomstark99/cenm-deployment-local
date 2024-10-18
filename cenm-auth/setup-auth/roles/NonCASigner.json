@@ -1,0 +1,6 @@
+{
+  "groups": [
+    { "entityName": "nonca-signers", "objectName": "global" },
+    { "entityName": "nonca-signers", "objectName": "<SUBZONE_ID>" }
+  ]
+}

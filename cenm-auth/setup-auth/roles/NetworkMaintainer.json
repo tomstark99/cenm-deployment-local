@@ -1,0 +1,6 @@
+{
+  "groups": [
+    { "entityName": "network-maintainers", "objectName": "global" },
+    { "entityName": "network-maintainers", "objectName": "<SUBZONE_ID>" }
+  ]
+}

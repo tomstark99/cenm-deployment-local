@@ -1,0 +1,6 @@
+{
+  "groups": [
+    { "entityName": "configuration-readers", "objectName": "global" },
+    { "entityName": "configuration-readers", "objectName": "<SUBZONE_ID>" }
+  ]
+}

@@ -1,0 +1,6 @@
+{
+  "groups": [
+    { "entityName": "network-operators", "objectName": "global" },
+    { "entityName": "network-operators", "objectName": "<SUBZONE_ID>" }
+  ]
+}
