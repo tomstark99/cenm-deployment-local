@@ -1,8 +1,19 @@
+############# root folder #############
+
 # python
 __pycache__
 
 # CENM folders
 cenm-*/
+!cenm-auth/
+!cenm-gateway/
+!cenm-idman/
+!cenm-nmap/
+!cenm-node/
+!cenm-notary/
+!cenm-pki/
+!cenm-signer/
+!cenm-zone/
 corda-*/
 
 # args
@@ -17,3 +28,64 @@ corda-*/
 # misc artifacts
 *.jar
 *.zip
+
+############# service folders #############
+
+# generated certificates
+**/certificates/*.jks
+
+# jar files
+**/*.jar
+
+# run-time files
+**/logs/
+**/h2/
+**/shell-commands/
+**/ssh/
+
+############# cenm-gateway #############
+
+# cenm-tool
+**/cenm-tool/*
+
+############# cenm-idman #############
+
+# generated certificates
+**/crl-files/*.crl
+
+# downloaded tools
+**/tools/*
+
+# jar files
+**/*.jar
+
+# run-time files
+identitymanager.conf
+token
+
+############# cenm-nmap #############
+
+# run-time files
+network-parameters.conf
+networkmap.conf
+nodeInfo*
+
+############# cenm-node #############
+
+# run-time dirs
+**/additional-node-infos/
+**/artemis/
+**/brokers/
+
+# run-time files
+network-parameters
+nodeInfo*
+process-id
+
+############# cenm-pki #############
+
+# certs
+cenm-pki/key-stores/
+cenm-pki/trust-stores/
+cenm-pki/crl-files/
+
