@@ -1,0 +1,6 @@
+{
+  "groups": [
+    { "entityName": "network-operation-readers", "objectName": "global" },
+    { "entityName": "network-operation-readers", "objectName": "<SUBZONE_ID>" }
+  ]
+}

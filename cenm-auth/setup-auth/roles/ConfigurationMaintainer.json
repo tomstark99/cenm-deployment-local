@@ -1,0 +1,6 @@
+{
+  "groups": [
+    { "entityName": "configuration-maintainers", "objectName": "global" },
+    { "entityName": "configuration-maintainers", "objectName": "<SUBZONE_ID>" }
+  ]
+}
